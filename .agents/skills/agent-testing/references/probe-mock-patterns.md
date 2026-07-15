@@ -1371,3 +1371,9 @@ nodeintegration, plugins, disablewebsecurity, allowpopups, preload, …`). The h
   clearing with `undefined` is a **no-op** and the field must be set to `null`.
 - **Test for it**: assert the field is `null` (not `undefined`) after the consume action; a test that
   only checks "the request was acted on" passes in both the broken and fixed versions.
+
+# C10. Electron dev instance ids are numeric pool indexes
+
+- **Situation**: starting an isolated Electron test instance with `electron-dev.sh start <id>`.
+- **Doesn't work**: a descriptive string id; the script rejects it before allocating ports.
+- **Works**: use a non-negative integer pool index (for example `start 1`) and use the port printed by the script for the CDP session.
