@@ -107,7 +107,7 @@ export const useMenu = (): { menuItems: any[] } => {
 
   const handlePublish = useCallback(() => {
     if (!canPublish || !documentId) return;
-    const accessLevelRef: { current: 'edit' | 'use' | 'view' } = { current: 'edit' };
+    const accessLevelRef: { current: 'edit' | 'view' } = { current: 'view' };
     confirmModal({
       cancelText: t('cancel', { ns: 'common' }),
       content: (

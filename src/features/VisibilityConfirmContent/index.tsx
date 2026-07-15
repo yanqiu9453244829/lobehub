@@ -24,7 +24,7 @@ export type VisibilityConfirmVariant = 'makePrivate' | 'publish';
 export interface VisibilityConfirmContentProps {
   /**
    * When provided on the `publish` variant, renders a Notion-style General
-   * access select ("everyone at workspace → can edit / view only") and writes
+   * access select (resource-specific edit/use/view choices) and writes
    * the choice into the ref so the caller's `onOk` can apply it after the
    * publish succeeds. A plain ref (not state) because `confirmModal` content
    * lives outside the caller's render tree.
@@ -186,7 +186,7 @@ const VisibilityConfirmContent = memo<VisibilityConfirmContentProps>(
     const config = CONFIG[variant];
     const irreversibleSuffix = t('visibilityConfirm.irreversible');
     const [accessLevel, setAccessLevel] = useState<ResourceAccessLevel>(
-      accessLevelRef?.current ?? 'edit',
+      accessLevelRef?.current ?? (resourceType === 'document' ? 'view' : 'use'),
     );
     const showAccessSelect = variant === 'publish' && !!accessLevelRef && !!resourceType;
 
@@ -266,27 +266,31 @@ const VisibilityConfirmContent = memo<VisibilityConfirmContentProps>(
                       },
                     ]
                   : []),
-                {
-                  label: (
-                    <Flexbox horizontal align={'center'} className={styles.optionRow} gap={8}>
-                      <Icon icon={EyeIcon} size={14} />
-                      <Text style={{ fontSize: 13, fontWeight: 500 }}>
-                        {t('permission.generalAccess.viewable', { ns: 'setting' })}
-                      </Text>
-                      <Text
-                        style={{
-                          color: cssVar.colorTextTertiary,
-                          fontSize: 12,
-                          marginInlineStart: 'auto',
-                        }}
-                      >
-                        {t('permission.generalAccess.viewableDesc', { ns: 'setting' })}
-                      </Text>
-                    </Flexbox>
-                  ),
-                  title: t('permission.generalAccess.viewable', { ns: 'setting' }),
-                  value: 'view',
-                },
+                ...(resourceType === 'document'
+                  ? [
+                      {
+                        label: (
+                          <Flexbox horizontal align={'center'} className={styles.optionRow} gap={8}>
+                            <Icon icon={EyeIcon} size={14} />
+                            <Text style={{ fontSize: 13, fontWeight: 500 }}>
+                              {t('permission.generalAccess.viewable', { ns: 'setting' })}
+                            </Text>
+                            <Text
+                              style={{
+                                color: cssVar.colorTextTertiary,
+                                fontSize: 12,
+                                marginInlineStart: 'auto',
+                              }}
+                            >
+                              {t('permission.generalAccess.viewableDesc', { ns: 'setting' })}
+                            </Text>
+                          </Flexbox>
+                        ),
+                        title: t('permission.generalAccess.viewable', { ns: 'setting' }),
+                        value: 'view' as const,
+                      },
+                    ]
+                  : []),
               ]}
               onChange={(nextAccessLevel) => {
                 if (!nextAccessLevel) return;

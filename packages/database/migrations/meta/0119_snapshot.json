@@ -6,7 +6,7 @@
   },
   "dialect": "postgresql",
   "enums": {},
-  "id": "e8d348e3-1473-42e4-862f-cec34538f30c",
+  "id": "c6d39cee-88c1-40b0-a5cf-8d9d98573196",
   "policies": {},
   "prevId": "8f880aef-6d25-4875-aaa9-d01d12e5d5c2",
   "roles": {},
@@ -15055,8 +15055,7 @@
           "name": "access_level",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'edit'"
+          "notNull": true
         },
         "created_by": {
           "name": "created_by",

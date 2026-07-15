@@ -570,6 +570,8 @@
   "notification.push.desc": "向您的行動裝置發送推播通知（需要 LobeHub 行動應用程式）",
   "notification.push.title": "行動推播通知",
   "notification.title": "通知頻道",
+  "permission.accessTag.useOnlyTip": "您的成員權限為「可使用」——您可以查看並使用，但無法編輯。請向創建者或工作區擁有者申請編輯權限。",
+  "permission.accessTag.viewOnlyTip": "您的成員權限為「僅可查看」——您可以查看，但無法使用或編輯。請向創建者或工作區擁有者申請更多權限。",
   "permission.generalAccess.editable": "可編輯",
   "permission.generalAccess.editableDesc": "成員可以檢視、使用和編輯",
   "permission.generalAccess.editableDocumentDesc": "成員可以檢視和編輯",

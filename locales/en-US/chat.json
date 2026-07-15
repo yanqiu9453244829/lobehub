@@ -610,6 +610,8 @@
   "pageCopilot.welcome": "**Clearer, sharper writing**\n\nDraft, rewrite, or polish—tell me your intent and I'll refine the rest.",
   "pageSelection.lines": "Lines {{start}}-{{end}}",
   "pageSelection.reference": "Selected Text",
+  "permission.configAccess.agentChatOnly": "Only collaborators with Can edit can configure this Agent. You were returned to chat.",
+  "permission.configAccess.groupChatOnly": "Only collaborators with Can edit can configure this Agent Group. You were returned to chat.",
   "pin": "Pin",
   "pinOff": "Unpin",
   "platformAgent.create.available": "Available",

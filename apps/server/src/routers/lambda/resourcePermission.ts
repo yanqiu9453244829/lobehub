@@ -3,7 +3,11 @@ import { z } from 'zod';
 
 import { wsCompatProcedure } from '@/business/server/trpc-middlewares/workspaceAuth';
 import { ResourcePermissionModel } from '@/database/models/resourcePermission';
-import { PERMISSION_RESOURCE_TYPES, RESOURCE_ACCESS_LEVELS } from '@/database/schemas';
+import {
+  getDefaultResourceAccessLevel,
+  PERMISSION_RESOURCE_TYPES,
+  RESOURCE_ACCESS_LEVELS,
+} from '@/database/schemas';
 import { router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import {
@@ -121,7 +125,9 @@ export const resourcePermissionRouter = router({
         });
       }
 
-      const accessLevel = input.accessLevel ?? (input.role === 'viewer' ? 'use' : 'edit');
+      const accessLevel =
+        input.accessLevel ??
+        (input.role === 'editor' ? 'edit' : getDefaultResourceAccessLevel(input.resourceType));
       if (!isAccessLevelAllowed(input.resourceType, accessLevel)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',

@@ -1,6 +1,7 @@
 'use client';
 
 import { useResourceAccess } from '@/features/ResourcePermission/useResourceAccess';
+import { usePermission } from '@/hooks/usePermission';
 import { useAgentStore } from '@/store/agent';
 import { builtinAgentSelectors } from '@/store/agent/selectors';
 import { useAgentGroupStore } from '@/store/agentGroup';
@@ -41,10 +42,15 @@ export const useConversationResourceAccess = () => {
       ? agentId
       : undefined;
 
+  const { allowed: canCreateContent } = usePermission('create_content');
   const { canUseResource, isLoading } = useResourceAccess(
     isGroupContext ? 'agentGroup' : 'agent',
     gatedResourceId,
   );
 
-  return { canUseResource, isAccessLoading: isLoading, isGroupContext };
+  return {
+    canUseResource: canCreateContent && canUseResource,
+    isAccessLoading: isLoading,
+    isGroupContext,
+  };
 };

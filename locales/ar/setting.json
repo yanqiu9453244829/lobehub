@@ -570,6 +570,8 @@
   "notification.push.desc": "إرسال إشعارات دفع إلى أجهزتك المحمولة (يتطلب تطبيق LobeHub المحمول)",
   "notification.push.title": "إشعارات الدفع للجوال",
   "notification.title": "قنوات الإشعارات",
+  "permission.accessTag.useOnlyTip": "إذن العضو الخاص بك هنا هو \"يمكن الاستخدام\" — يمكنك عرضه واستخدامه، ولكن لا يمكنك تعديله. اطلب من المنشئ أو مالك مساحة العمل الحصول على إذن التعديل.",
+  "permission.accessTag.viewOnlyTip": "إذن العضو الخاص بك هنا هو \"يمكن العرض\" — يمكنك عرضه، ولكن لا يمكنك استخدامه أو تعديله. اطلب من المنشئ أو مالك مساحة العمل الحصول على المزيد من الأذونات.",
   "permission.generalAccess.editable": "يمكن التعديل",
   "permission.generalAccess.editableDesc": "يمكن للأعضاء العرض والاستخدام والتعديل",
   "permission.generalAccess.editableDocumentDesc": "يمكن للأعضاء العرض والتعديل",

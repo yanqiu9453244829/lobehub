@@ -131,14 +131,14 @@ const Header = memo(() => {
   const { allowed: hasEditPermission } = usePermission('edit_own_content');
   // A workspace member without edit-level General access on this agent gets the
   // same disabled-with-tooltip treatment as a role viewer (server enforces).
-  const { canEditResource } = useResourceAccess(
+  const { canEditResource, canManageResource } = useResourceAccess(
     'agent',
     showPermissionsEntry ? activeAgentId : undefined,
   );
-  const canEdit = hasEditPermission && canEditResource;
+  const canManage = hasEditPermission && canManageResource;
 
   const handleDelete = useCallback(() => {
-    if (!canEdit || !activeAgentId) return;
+    if (!canManage || !activeAgentId) return;
     confirmModal({
       okButtonProps: { danger: true },
       onOk: async () => {
@@ -148,7 +148,7 @@ const Header = memo(() => {
       },
       title: t('confirmRemoveSessionItemAlert', { ns: 'chat' }),
     });
-  }, [activeAgentId, canEdit, navigate, removeAgent, t]);
+  }, [activeAgentId, canManage, navigate, removeAgent, t]);
 
   const handleExportMarkdown = useCallback(async () => {
     try {
@@ -258,15 +258,16 @@ const Header = memo(() => {
       importMenuItem,
       businessTransferMenuItems.length > 0 ? { type: 'divider' as const } : null,
       ...businessTransferMenuItems,
-      { type: 'divider' as const },
-      {
-        danger: true,
-        disabled: !canEdit,
-        icon: <Icon icon={Trash} />,
-        key: 'delete',
-        label: t('delete', { ns: 'common' }),
-        onClick: handleDelete,
-      },
+      canManage ? { type: 'divider' as const } : null,
+      canManage
+        ? {
+            danger: true,
+            icon: <Icon icon={Trash} />,
+            key: 'delete',
+            label: t('delete', { ns: 'common' }),
+            onClick: handleDelete,
+          }
+        : null,
       // Author / creation info footer, mirroring the page editor menu.
       ...(!isInbox && (authorName || createdAt)
         ? [
@@ -297,8 +298,8 @@ const Header = memo(() => {
   }, [
     activeAgentId,
     authorName,
-    canEdit,
     canEditResource,
+    canManage,
     createdAt,
     dateLocale,
     handleExportMarkdown,

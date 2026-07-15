@@ -570,6 +570,8 @@
   "notification.push.desc": "Stuur pushmeldingen naar je mobiele apparaten (LobeHub mobiele app vereist)",
   "notification.push.title": "Mobiele pushmeldingen",
   "notification.title": "Meldingskanalen",
+  "permission.accessTag.useOnlyTip": "Uw lidmaatschapsrechten hier zijn \"Kan gebruiken\" — u kunt het bekijken en gebruiken, maar niet bewerken. Vraag de maker of een werkruimte-eigenaar om bewerkrechten.",
+  "permission.accessTag.viewOnlyTip": "Uw lidmaatschapsrechten hier zijn \"Kan bekijken\" — u kunt het bekijken, maar niet gebruiken of bewerken. Vraag de maker of een werkruimte-eigenaar om meer rechten.",
   "permission.generalAccess.editable": "Kan bewerken",
   "permission.generalAccess.editableDesc": "Leden kunnen bekijken, gebruiken en bewerken",
   "permission.generalAccess.editableDocumentDesc": "Leden kunnen bekijken en bewerken",

@@ -38,6 +38,10 @@ export default {
   'agentDocument.openAsPage': 'Open as full page',
   'agentNotFound.desc':
     'This agent does not exist or is no longer accessible — it may have been deleted or set to private by its owner.',
+  'permission.configAccess.agentChatOnly':
+    'Only collaborators with Can edit can configure this Agent. You were returned to chat.',
+  'permission.configAccess.groupChatOnly':
+    'Only collaborators with Can edit can configure this Agent Group. You were returned to chat.',
   'agentNotFound.title': 'Agent Unavailable',
   'groupNotFound.desc':
     'This group does not exist or is no longer accessible — it may have been deleted or set to private by its owner.',

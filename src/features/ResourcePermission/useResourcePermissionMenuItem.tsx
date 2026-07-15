@@ -45,29 +45,26 @@ export const useResourcePermissionMenuItem = (
         value: 'use',
       });
     }
-    levels.push({
-      desc: t(
-        resourceType === 'document'
-          ? 'permission.generalAccess.viewableDocumentDesc'
-          : 'permission.generalAccess.viewableDesc',
-      ),
-      icon: EyeIcon,
-      label: t('permission.generalAccess.viewable'),
-      value: 'view',
-    });
+    if (resourceType === 'document') {
+      levels.push({
+        desc: t('permission.generalAccess.viewableDocumentDesc'),
+        icon: EyeIcon,
+        label: t('permission.generalAccess.viewable'),
+        value: 'view',
+      });
+    }
     return levels;
   }, [resourceType, t]);
 
-  if (!resourceId) return null;
+  if (!resourceId || !data?.canManage) return null;
 
   const accessLevel = data?.accessLevel;
-  const canManage = data?.canManage ?? false;
   const selectedOption = accessOptions.find((option) => option.value === accessLevel);
 
   return {
     children: accessOptions.map(({ desc, icon, label, value }) => ({
       desc,
-      disabled: !canManage || updating,
+      disabled: updating,
       icon: <Icon icon={icon} />,
       key: `member-permission-${value}`,
       label: (

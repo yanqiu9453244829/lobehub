@@ -1,14 +1,8 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { PermissionResourceType, ResourceAccessLevel } from '../schemas';
-import { resourcePermissions } from '../schemas';
+import { getDefaultResourceAccessLevel, resourcePermissions } from '../schemas';
 import type { LobeChatDatabase } from '../type';
-
-/**
- * Legacy public resources predate explicit access rows. Keep their historical
- * workspace-collaboration behavior without a data backfill.
- */
-export const LEGACY_PUBLIC_ACCESS_LEVEL: ResourceAccessLevel = 'edit';
 
 /**
  * Workspace-wide access policy for public resources. All methods are scoped
@@ -44,12 +38,15 @@ export class ResourcePermissionModel {
     return row?.accessLevel ?? null;
   };
 
-  /** Resolve legacy public resources without requiring a backfill. */
+  /** Resolve a missing row through the resource-specific Workspace default. */
   getEffectiveAccessLevel = async (
     resourceType: PermissionResourceType,
     resourceId: string,
   ): Promise<ResourceAccessLevel> => {
-    return (await this.getAccessLevel(resourceType, resourceId)) ?? LEGACY_PUBLIC_ACCESS_LEVEL;
+    return (
+      (await this.getAccessLevel(resourceType, resourceId)) ??
+      getDefaultResourceAccessLevel(resourceType)
+    );
   };
 
   /** Explicitly persist the Workspace access level for a public resource. */

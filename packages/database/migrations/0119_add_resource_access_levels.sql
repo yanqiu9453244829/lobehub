@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS "resource_permissions" (
 	"resource_type" text NOT NULL,
 	"resource_id" text NOT NULL,
 	"workspace_id" text NOT NULL,
-	"access_level" text DEFAULT 'edit' NOT NULL,
+	"access_level" text NOT NULL,
 	"created_by" text,
 	"accessed_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

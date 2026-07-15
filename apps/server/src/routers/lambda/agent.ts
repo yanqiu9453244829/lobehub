@@ -15,6 +15,7 @@ import { ResourcePermissionModel } from '@/database/models/resourcePermission';
 import { SessionModel } from '@/database/models/session';
 import { TaskModel } from '@/database/models/task';
 import { UserModel } from '@/database/models/user';
+import { DEFAULT_RESOURCE_ACCESS_LEVELS, RESOURCE_ACCESS_LEVELS_BY_TYPE } from '@/database/schemas';
 import { router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { AgentService } from '@/server/services/agent';
@@ -112,7 +113,7 @@ export const agentRouter = router({
         await new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId).setAccessLevel(
           'agent',
           agent.id,
-          'edit',
+          DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
           ctx.userId,
         );
       }
@@ -135,7 +136,7 @@ export const agentRouter = router({
         await new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId).setAccessLevel(
           'agent',
           input.id,
-          'edit',
+          DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
           ctx.userId,
         );
       }
@@ -155,7 +156,7 @@ export const agentRouter = router({
     .use(withScopedPermission('agent:update'))
     .input(
       z.object({
-        accessLevel: z.enum(['view', 'use', 'edit']).optional(),
+        accessLevel: z.enum(RESOURCE_ACCESS_LEVELS_BY_TYPE.agent).optional(),
         id: z.string(),
         visibility: z.enum(['private', 'public']),
       }),
@@ -256,14 +257,17 @@ export const agentRouter = router({
       const updated = await ctx.agentModel.setVisibility(input.id, input.visibility);
       if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Agent not found' });
 
-      const accessLevel = input.visibility === 'private' ? 'edit' : (input.accessLevel ?? 'edit');
+      const accessLevel =
+        input.visibility === 'private'
+          ? 'edit'
+          : (input.accessLevel ?? DEFAULT_RESOURCE_ACCESS_LEVELS.agent);
       if (input.visibility === 'private') {
         await permissionModel.removeAll('agent', input.id);
       } else {
         await permissionModel.setAccessLevel(
           'agent',
           input.id,
-          input.accessLevel ?? 'edit',
+          input.accessLevel ?? DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
           ctx.userId,
         );
       }
@@ -350,7 +354,7 @@ export const agentRouter = router({
         await new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId).setAccessLevel(
           'agent',
           agent.id,
-          'edit',
+          DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
           ctx.userId,
         );
       }
@@ -420,7 +424,7 @@ export const agentRouter = router({
         await new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId).setAccessLevel(
           'agent',
           result.agentId,
-          'edit',
+          DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
           ctx.userId,
         );
       }
@@ -680,7 +684,7 @@ export const agentRouter = router({
     .input(
       z.object({
         agentId: z.string(),
-        targetAccessLevel: z.enum(['view', 'use', 'edit']).optional(),
+        targetAccessLevel: z.enum(RESOURCE_ACCESS_LEVELS_BY_TYPE.agent).optional(),
         /** @deprecated Compatibility for released clients. */
         targetGeneralAccess: z.enum(['editor', 'viewer']).optional(),
         targetVisibility: z.enum(['private', 'public']).optional(),
@@ -766,7 +770,8 @@ export const agentRouter = router({
       }
       if (input.targetWorkspaceId && input.targetVisibility === 'public') {
         const targetAccessLevel =
-          input.targetAccessLevel ?? (input.targetGeneralAccess === 'viewer' ? 'use' : 'edit');
+          input.targetAccessLevel ??
+          (input.targetGeneralAccess === 'editor' ? 'edit' : DEFAULT_RESOURCE_ACCESS_LEVELS.agent);
         await new ResourcePermissionModel(ctx.serverDB, input.targetWorkspaceId).setAccessLevel(
           'agent',
           input.agentId,

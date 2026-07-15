@@ -1,6 +1,7 @@
 'use client';
 
 import { useResourceAccess } from '@/features/ResourcePermission/useResourceAccess';
+import { usePermission } from '@/hooks/usePermission';
 import { useAgentStore } from '@/store/agent';
 import { builtinAgentSelectors } from '@/store/agent/selectors';
 import { useAgentGroupStore } from '@/store/agentGroup';
@@ -36,10 +37,19 @@ export const useChatInputResourceAccess = () => {
       ? chatInputAgentId
       : undefined;
 
-  const { canUseResource } = useResourceAccess(
-    isGroupContext ? 'agentGroup' : 'agent',
-    gatedResourceId,
-  );
+  const { allowed: canCreateContent } = usePermission('create_content');
+  const { allowed: canEditContent } = usePermission('edit_own_content');
+  const {
+    canEditResource,
+    canUseResource: canUseResourceLevel,
+    isAccessResolved,
+    isLoading: isAccessLoading,
+  } = useResourceAccess(isGroupContext ? 'agentGroup' : 'agent', gatedResourceId);
 
-  return { canUseResource, isGroupContext };
+  return {
+    canConfigureResource: isAccessResolved && canEditContent && canEditResource,
+    canUseResource: canCreateContent && canUseResourceLevel,
+    isAccessLoading,
+    isGroupContext,
+  };
 };

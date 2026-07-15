@@ -570,6 +570,8 @@
   "notification.push.desc": "Mobil cihazlarınıza anlık bildirimler gönderin (LobeHub mobil uygulaması gereklidir)",
   "notification.push.title": "Mobil Anlık Bildirimler",
   "notification.title": "Bildirim Kanalları",
+  "permission.accessTag.useOnlyTip": "Buradaki üye izniniz \"Kullanabilir\" — görüntüleyebilir ve kullanabilirsiniz, ancak düzenleyemezsiniz. Düzenleme erişimi için oluşturucuya veya bir çalışma alanı sahibine başvurun.",
+  "permission.accessTag.viewOnlyTip": "Buradaki üye izniniz \"Görüntüleyebilir\" — görüntüleyebilirsiniz, ancak kullanamaz veya düzenleyemezsiniz. Daha fazla erişim için oluşturucuya veya bir çalışma alanı sahibine başvurun.",
   "permission.generalAccess.editable": "Düzenleyebilir",
   "permission.generalAccess.editableDesc": "Üyeler görüntüleyebilir, kullanabilir ve düzenleyebilir",
   "permission.generalAccess.editableDocumentDesc": "Üyeler görüntüleyebilir ve düzenleyebilir",

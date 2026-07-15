@@ -570,6 +570,8 @@
   "notification.push.desc": "Wysyłaj powiadomienia push na swoje urządzenia mobilne (wymagana aplikacja mobilna LobeHub)",
   "notification.push.title": "Mobilne powiadomienia push",
   "notification.title": "Kanały powiadomień",
+  "permission.accessTag.useOnlyTip": "Twoje uprawnienie członkowskie tutaj to „Może używać” — możesz to przeglądać i używać, ale nie edytować. Poproś twórcę lub właściciela przestrzeni roboczej o dostęp do edycji.",
+  "permission.accessTag.viewOnlyTip": "Twoje uprawnienie członkowskie tutaj to „Może przeglądać” — możesz to przeglądać, ale nie używać ani edytować. Poproś twórcę lub właściciela przestrzeni roboczej o większy dostęp.",
   "permission.generalAccess.editable": "Może edytować",
   "permission.generalAccess.editableDesc": "Członkowie mogą przeglądać, używać i edytować",
   "permission.generalAccess.editableDocumentDesc": "Członkowie mogą przeglądać i edytować",

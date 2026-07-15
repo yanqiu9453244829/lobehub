@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import { ResourcePermissionModel } from '@/database/models/resourcePermission';
 import type { PermissionResourceType, ResourceAccessLevel } from '@/database/schemas';
-import { agents, chatGroups, documents } from '@/database/schemas';
+import { agents, chatGroups, documents, isResourceAccessLevelAllowed } from '@/database/schemas';
 import type { LobeChatDatabase } from '@/database/type';
 import { getWorkspaceScopedPermissionMatches } from '@/server/services/workspacePermission';
 
@@ -58,7 +58,7 @@ const ACCESS_LEVEL_RANK: Record<ResourceAccessLevel, number> = {
 export const isAccessLevelAllowed = (
   resourceType: PermissionResourceType,
   accessLevel: ResourceAccessLevel,
-) => resourceType !== 'document' || accessLevel !== 'use';
+) => isResourceAccessLevelAllowed(resourceType, accessLevel);
 
 /**
  * Fetch creator/visibility/workspace of a permission-capable resource,

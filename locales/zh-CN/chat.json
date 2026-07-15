@@ -610,6 +610,8 @@
   "pageCopilot.welcome": "**让文字更清晰、更到位**\n\n起草、改写、润色都可以。你把意图说清楚，其余交给我打磨",
   "pageSelection.lines": "第 {{start}}-{{end}} 行",
   "pageSelection.reference": "选中文本",
+  "permission.configAccess.agentChatOnly": "只有拥有「可编辑」权限的协作者可以配置该 Agent，已为你返回聊天页。",
+  "permission.configAccess.groupChatOnly": "只有拥有「可编辑」权限的协作者可以配置该 Agent 群组，已为你返回聊天页。",
   "pin": "置顶",
   "pinOff": "取消置顶",
   "platformAgent.create.available": "可用",

@@ -9,6 +9,7 @@ import { ChatGroupModel } from '@/database/models/chatGroup';
 import { ResourcePermissionModel } from '@/database/models/resourcePermission';
 import { UserModel } from '@/database/models/user';
 import { AgentGroupRepository } from '@/database/repositories/agentGroup';
+import { DEFAULT_RESOURCE_ACCESS_LEVELS, RESOURCE_ACCESS_LEVELS_BY_TYPE } from '@/database/schemas';
 import { type ChatGroupConfig } from '@/database/types/chatGroup';
 import { router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
@@ -140,7 +141,14 @@ export const agentGroupRouter = router({
         await Promise.all(
           createdAgents
             .filter((agent) => agent.visibility !== 'private')
-            .map((agent) => permissionModel.setAccessLevel('agent', agent.id, 'edit', ctx.userId)),
+            .map((agent) =>
+              permissionModel.setAccessLevel(
+                'agent',
+                agent.id,
+                DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
+                ctx.userId,
+              ),
+            ),
         );
       }
 
@@ -178,8 +186,18 @@ export const agentGroupRouter = router({
       if (ctx.workspaceId && group.visibility !== 'private') {
         const permissionModel = new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId);
         await Promise.all([
-          permissionModel.setAccessLevel('agentGroup', group.id, 'edit', ctx.userId),
-          permissionModel.setAccessLevel('agent', supervisorAgentId, 'edit', ctx.userId),
+          permissionModel.setAccessLevel(
+            'agentGroup',
+            group.id,
+            DEFAULT_RESOURCE_ACCESS_LEVELS.agentGroup,
+            ctx.userId,
+          ),
+          permissionModel.setAccessLevel(
+            'agent',
+            supervisorAgentId,
+            DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
+            ctx.userId,
+          ),
         ]);
       }
 
@@ -253,11 +271,28 @@ export const agentGroupRouter = router({
       if (ctx.workspaceId && group.visibility !== 'private') {
         const permissionModel = new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId);
         await Promise.all([
-          permissionModel.setAccessLevel('agentGroup', group.id, 'edit', ctx.userId),
-          permissionModel.setAccessLevel('agent', supervisorAgentId, 'edit', ctx.userId),
+          permissionModel.setAccessLevel(
+            'agentGroup',
+            group.id,
+            DEFAULT_RESOURCE_ACCESS_LEVELS.agentGroup,
+            ctx.userId,
+          ),
+          permissionModel.setAccessLevel(
+            'agent',
+            supervisorAgentId,
+            DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
+            ctx.userId,
+          ),
           ...createdAgents
             .filter((agent) => agent.visibility !== 'private')
-            .map((agent) => permissionModel.setAccessLevel('agent', agent.id, 'edit', ctx.userId)),
+            .map((agent) =>
+              permissionModel.setAccessLevel(
+                'agent',
+                agent.id,
+                DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
+                ctx.userId,
+              ),
+            ),
         ]);
       }
 
@@ -317,8 +352,18 @@ export const agentGroupRouter = router({
       if (ctx.workspaceId && result) {
         const permissionModel = new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId);
         await Promise.all([
-          permissionModel.setAccessLevel('agentGroup', result.groupId, 'edit', ctx.userId),
-          permissionModel.setAccessLevel('agent', result.supervisorAgentId, 'edit', ctx.userId),
+          permissionModel.setAccessLevel(
+            'agentGroup',
+            result.groupId,
+            DEFAULT_RESOURCE_ACCESS_LEVELS.agentGroup,
+            ctx.userId,
+          ),
+          permissionModel.setAccessLevel(
+            'agent',
+            result.supervisorAgentId,
+            DEFAULT_RESOURCE_ACCESS_LEVELS.agent,
+            ctx.userId,
+          ),
         ]);
       }
       return result;
@@ -417,7 +462,7 @@ export const agentGroupRouter = router({
     .input(
       z.object({
         groupId: z.string(),
-        targetAccessLevel: z.enum(['view', 'use', 'edit']).optional(),
+        targetAccessLevel: z.enum(RESOURCE_ACCESS_LEVELS_BY_TYPE.agentGroup).optional(),
         /** @deprecated Compatibility for released clients. */
         targetGeneralAccess: z.enum(['editor', 'viewer']).optional(),
         targetVisibility: z.enum(['private', 'public']).optional(),
@@ -498,7 +543,10 @@ export const agentGroupRouter = router({
       }
       if (input.targetWorkspaceId && input.targetVisibility === 'public') {
         const targetAccessLevel =
-          input.targetAccessLevel ?? (input.targetGeneralAccess === 'viewer' ? 'use' : 'edit');
+          input.targetAccessLevel ??
+          (input.targetGeneralAccess === 'editor'
+            ? 'edit'
+            : DEFAULT_RESOURCE_ACCESS_LEVELS.agentGroup);
         await new ResourcePermissionModel(ctx.serverDB, input.targetWorkspaceId).setAccessLevel(
           'agentGroup',
           input.groupId,
@@ -549,7 +597,7 @@ export const agentGroupRouter = router({
         await new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId).setAccessLevel(
           'agentGroup',
           input.id,
-          'edit',
+          DEFAULT_RESOURCE_ACCESS_LEVELS.agentGroup,
           ctx.userId,
         );
       }
@@ -567,7 +615,7 @@ export const agentGroupRouter = router({
   setGroupVisibility: agentGroupProcedureWrite
     .input(
       z.object({
-        accessLevel: z.enum(['view', 'use', 'edit']).optional(),
+        accessLevel: z.enum(RESOURCE_ACCESS_LEVELS_BY_TYPE.agentGroup).optional(),
         id: z.string(),
         visibility: z.enum(['private', 'public']),
       }),
@@ -642,14 +690,17 @@ export const agentGroupRouter = router({
       const updated = await ctx.chatGroupModel.setVisibility(input.id, input.visibility);
       if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Group not found' });
 
-      const accessLevel = input.visibility === 'private' ? 'edit' : (input.accessLevel ?? 'edit');
+      const accessLevel =
+        input.visibility === 'private'
+          ? 'edit'
+          : (input.accessLevel ?? DEFAULT_RESOURCE_ACCESS_LEVELS.agentGroup);
       if (input.visibility === 'private') {
         await permissionModel.removeAll('agentGroup', input.id);
       } else {
         await permissionModel.setAccessLevel(
           'agentGroup',
           input.id,
-          input.accessLevel ?? 'edit',
+          input.accessLevel ?? DEFAULT_RESOURCE_ACCESS_LEVELS.agentGroup,
           ctx.userId,
         );
       }

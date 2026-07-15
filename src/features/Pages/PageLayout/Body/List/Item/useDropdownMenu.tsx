@@ -101,7 +101,7 @@ export const useDropdownMenu = ({
     // flat list, so users can't see (and don't reliably know about) a
     // subtree — surfacing a "N sub-pages" count only creates confusion.
     // Visibility is changed only for this page; descendants stay independent.
-    const accessLevelRef: { current: 'edit' | 'use' | 'view' } = { current: 'edit' };
+    const accessLevelRef: { current: 'edit' | 'view' } = { current: 'view' };
     confirmModal({
       cancelText: t('cancel'),
       content: (

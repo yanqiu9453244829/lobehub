@@ -10,6 +10,7 @@ import { DocumentModel } from '@/database/models/document';
 import { FileModel } from '@/database/models/file';
 import { MessageModel } from '@/database/models/message';
 import { ResourcePermissionModel } from '@/database/models/resourcePermission';
+import { DEFAULT_RESOURCE_ACCESS_LEVELS } from '@/database/schemas';
 import { router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { DocumentService } from '@/server/services/document';
@@ -90,7 +91,7 @@ export const documentRouter = router({
         await new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId).setAccessLevel(
           'document',
           document.id,
-          'edit',
+          DEFAULT_RESOURCE_ACCESS_LEVELS.document,
           ctx.userId,
         );
       }
@@ -147,7 +148,12 @@ export const documentRouter = router({
           createdDocuments
             .filter((document) => document.visibility !== 'private')
             .map((document) =>
-              permissionModel.setAccessLevel('document', document.id, 'edit', ctx.userId),
+              permissionModel.setAccessLevel(
+                'document',
+                document.id,
+                DEFAULT_RESOURCE_ACCESS_LEVELS.document,
+                ctx.userId,
+              ),
             ),
         );
       }
@@ -479,7 +485,7 @@ export const documentRouter = router({
             targetPermissionModel.setAccessLevel(
               'document',
               id,
-              input.targetAccessLevel ?? 'edit',
+              input.targetAccessLevel ?? DEFAULT_RESOURCE_ACCESS_LEVELS.document,
               ctx.userId,
             ),
           ),
@@ -525,7 +531,7 @@ export const documentRouter = router({
         await new ResourcePermissionModel(ctx.serverDB, ctx.workspaceId).setAccessLevel(
           'document',
           input.id,
-          'edit',
+          DEFAULT_RESOURCE_ACCESS_LEVELS.document,
           ctx.userId,
         );
       }
@@ -594,14 +600,17 @@ export const documentRouter = router({
       }
 
       const result = await ctx.documentService.setVisibility(input.id, input.visibility);
-      const accessLevel = input.visibility === 'private' ? 'edit' : (input.accessLevel ?? 'edit');
+      const accessLevel =
+        input.visibility === 'private'
+          ? 'edit'
+          : (input.accessLevel ?? DEFAULT_RESOURCE_ACCESS_LEVELS.document);
       if (input.visibility === 'private') {
         await permissionModel.removeAll('document', input.id);
       } else {
         await permissionModel.setAccessLevel(
           'document',
           input.id,
-          input.accessLevel ?? 'edit',
+          input.accessLevel ?? DEFAULT_RESOURCE_ACCESS_LEVELS.document,
           ctx.userId,
         );
       }

@@ -2,9 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { getTestDB } from '../../core/getTestDB';
-import { resourcePermissions, users, workspaces } from '../../schemas';
+import {
+  isResourceAccessLevelAllowed,
+  resourcePermissions,
+  users,
+  workspaces,
+} from '../../schemas';
 import type { LobeChatDatabase } from '../../type';
-import { LEGACY_PUBLIC_ACCESS_LEVEL, ResourcePermissionModel } from '../resourcePermission';
+import { ResourcePermissionModel } from '../resourcePermission';
 
 const serverDB: LobeChatDatabase = await getTestDB();
 
@@ -32,20 +37,45 @@ afterEach(async () => {
 });
 
 describe('ResourcePermissionModel', () => {
-  it('falls back to edit for a legacy public resource without a row', async () => {
-    expect(await model.getAccessLevel('agent', agentId)).toBeNull();
-    expect(await model.getEffectiveAccessLevel('agent', agentId)).toBe(LEGACY_PUBLIC_ACCESS_LEVEL);
+  it.each([
+    ['agent', 'use'],
+    ['agentGroup', 'use'],
+    ['document', 'view'],
+  ] as const)(
+    'falls back to %s-specific default %s without a row',
+    async (resourceType, expected) => {
+      expect(await model.getAccessLevel(resourceType, agentId)).toBeNull();
+      expect(await model.getEffectiveAccessLevel(resourceType, agentId)).toBe(expected);
+    },
+  );
+
+  it.each([
+    ['agent', 'use'],
+    ['agent', 'edit'],
+    ['agentGroup', 'use'],
+    ['agentGroup', 'edit'],
+    ['document', 'view'],
+    ['document', 'edit'],
+  ] as const)('explicitly stores %s %s access', async (resourceType, accessLevel) => {
+    await model.setAccessLevel(resourceType, agentId, accessLevel, ownerId);
+
+    expect(await model.getAccessLevel(resourceType, agentId)).toBe(accessLevel);
+    expect(await model.getEffectiveAccessLevel(resourceType, agentId)).toBe(accessLevel);
   });
 
-  it.each(['view', 'use', 'edit'] as const)('explicitly stores %s access', async (accessLevel) => {
-    await model.setAccessLevel('agent', agentId, accessLevel, ownerId);
-
-    expect(await model.getAccessLevel('agent', agentId)).toBe(accessLevel);
-    expect(await model.getEffectiveAccessLevel('agent', agentId)).toBe(accessLevel);
+  it.each([
+    ['agent', 'use', true],
+    ['agent', 'view', false],
+    ['agentGroup', 'use', true],
+    ['agentGroup', 'view', false],
+    ['document', 'view', true],
+    ['document', 'use', false],
+  ] as const)('validates %s %s as %s', (resourceType, accessLevel, expected) => {
+    expect(isResourceAccessLevelAllowed(resourceType, accessLevel)).toBe(expected);
   });
 
   it('keeps an explicit row when setting edit', async () => {
-    await model.setAccessLevel('agent', agentId, 'view', ownerId);
+    await model.setAccessLevel('agent', agentId, 'use', ownerId);
     await model.setAccessLevel('agent', agentId, 'edit', ownerId);
 
     expect(await model.getAccessLevel('agent', agentId)).toBe('edit');
@@ -54,7 +84,7 @@ describe('ResourcePermissionModel', () => {
   });
 
   it('set is idempotent and updates the access level on conflict', async () => {
-    await model.setAccessLevel('agent', agentId, 'view', ownerId);
+    await model.setAccessLevel('agent', agentId, 'edit', ownerId);
     await model.setAccessLevel('agent', agentId, 'use', ownerId);
 
     expect(await model.getAccessLevel('agent', agentId)).toBe('use');
@@ -63,7 +93,7 @@ describe('ResourcePermissionModel', () => {
   });
 
   it('is isolated per workspace and per resource type', async () => {
-    await model.setAccessLevel('agent', agentId, 'view', ownerId);
+    await model.setAccessLevel('agent', agentId, 'use', ownerId);
 
     const otherWs = new ResourcePermissionModel(serverDB, wsId2);
     expect(await otherWs.getAccessLevel('agent', agentId)).toBeNull();
@@ -71,7 +101,7 @@ describe('ResourcePermissionModel', () => {
   });
 
   it('removeAll clears every row of a resource', async () => {
-    await model.setAccessLevel('agent', agentId, 'view', ownerId);
+    await model.setAccessLevel('agent', agentId, 'use', ownerId);
     await model.removeAll('agent', agentId);
 
     expect(await model.getAccessLevel('agent', agentId)).toBeNull();

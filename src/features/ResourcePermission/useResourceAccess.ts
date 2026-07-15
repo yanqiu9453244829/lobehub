@@ -9,11 +9,10 @@ const FETCH_RESOURCE_PERMISSION_KEY = 'resource-permission';
 /**
  * Read-side derivation of the workspace General-access level for a resource.
  *
- * Permissive by default: personal mode (no active workspace), loading, and
- * error states all report full access — never flash disabled UI while the
- * level is still unknown; the server remains the enforcement point. Creator
- * and workspace owner (`canManage`) always keep full edit/use rights
- * regardless of the configured access level.
+ * Edit/use checks stay permissive while workspace access is loading so chat
+ * input does not flash disabled. Management checks are deliberately
+ * fail-closed: destructive/ownership controls must not appear until the
+ * server confirms creator/owner access. Personal mode keeps full access.
  */
 export const useResourceAccess = (
   resourceType: PermissionResourceType,
@@ -22,14 +21,18 @@ export const useResourceAccess = (
   const hasActiveWorkspace = useHasActiveWorkspace();
   const enabled = hasActiveWorkspace && !!resourceId;
 
-  const { data, isLoading } = useClientDataSWR(
+  const { data, error, isLoading, mutate } = useClientDataSWR(
     enabled ? [FETCH_RESOURCE_PERMISSION_KEY, resourceType, resourceId] : null,
     () => resourcePermissionService.getGeneralAccess(resourceType, resourceId!),
   );
 
   return {
+    accessError: error,
     canEditResource: !enabled || !data ? true : data.canManage || data.accessLevel === 'edit',
+    canManageResource: !enabled || data?.canManage === true,
     canUseResource: !enabled || !data ? true : data.canManage || data.accessLevel !== 'view',
+    isAccessResolved: !enabled || !!data,
     isLoading,
+    retryAccess: mutate,
   };
 };

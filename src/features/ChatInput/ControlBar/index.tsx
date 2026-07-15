@@ -7,6 +7,7 @@ import { agentByIdSelectors } from '@/store/agent/selectors';
 
 import ContextWindow from '../ActionBar/Token';
 import { useAgentId } from '../hooks/useAgentId';
+import { useChatInputResourceAccess } from '../hooks/useChatInputResourceAccess';
 import { useEffectiveAgentMode } from '../hooks/useEffectiveAgentMode';
 import { useChatInputStore } from '../store';
 import ApprovalMode from './ApprovalMode';
@@ -41,12 +42,17 @@ const styles = createStaticStyles(({ css }) => ({
 
 const ControlBar = memo(() => {
   const agentId = useAgentId();
+  const { canConfigureResource, isAccessLoading } = useChatInputResourceAccess();
   const showContextWindow = useChatInputStore((s) =>
     s.rightActions.flat().includes('contextWindow'),
   );
 
   const isLoading = useAgentStore((s) => agentByIdSelectors.isAgentConfigLoadingById(agentId)(s));
   const { isAgentRuntimeMode } = useEffectiveAgentMode(agentId);
+
+  // Chat-only collaborators and workspace viewers should not see configuration
+  // controls (mode, device, approval policy, or context settings).
+  if (isAccessLoading || !canConfigureResource) return null;
 
   // Skeleton placeholder to prevent layout jump during loading
   if (!agentId || isLoading) {

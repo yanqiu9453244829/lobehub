@@ -89,13 +89,17 @@ describe('agentRouter', () => {
   let fileModelMock: any;
   let knowledgeBaseModelMock: any;
   let agentServiceMock: any;
+  let resourcePermissionModelMock: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(assertCanPerformResourceAction).mockResolvedValue();
-    vi.mocked(ResourcePermissionModel).mockImplementation(
-      () => ({ removeAll: vi.fn(), setAccessLevel: vi.fn() }) as any,
-    );
+    resourcePermissionModelMock = {
+      getEffectiveAccessLevel: vi.fn().mockResolvedValue('use'),
+      removeAll: vi.fn(),
+      setAccessLevel: vi.fn(),
+    };
+    vi.mocked(ResourcePermissionModel).mockImplementation(() => resourcePermissionModelMock);
 
     agentModelMock = {
       createAgentFiles: vi.fn(),
@@ -519,6 +523,25 @@ describe('agentRouter', () => {
 
       expect(taskModelMock.countTasksBlockingAgentDemotion).not.toHaveBeenCalled();
       expect(agentModelMock.setVisibility).toHaveBeenCalledWith('agent-1', 'public');
+      expect(resourcePermissionModelMock.setAccessLevel).toHaveBeenCalledWith(
+        'agent',
+        'agent-1',
+        'use',
+        userId,
+      );
+    });
+
+    it('rejects document-only view access for an agent', async () => {
+      const caller = agentRouter.createCaller(wsCtx());
+
+      await expect(
+        caller.setAgentVisibility({
+          accessLevel: 'view',
+          id: 'agent-1',
+          visibility: 'public',
+        } as any),
+      ).rejects.toBeDefined();
+      expect(agentModelMock.setVisibility).not.toHaveBeenCalled();
     });
   });
 
@@ -526,13 +549,13 @@ describe('agentRouter', () => {
     const wsCtx = () => ({ ...mockCtx, workspaceId: 'ws-1' });
 
     describe('updateAgentConfig write guard', () => {
-      it('rejects the update when general access is view-only for the caller', async () => {
+      it('rejects the update when general access is use-only for the caller', async () => {
         agentServiceMock.updateAgentConfig = vi.fn().mockResolvedValue({ id: 'agent-1' });
         const { TRPCError } = await import('@trpc/server');
         vi.mocked(assertCanEditResource).mockRejectedValueOnce(
           new TRPCError({
             code: 'FORBIDDEN',
-            message: 'This resource is view-only for workspace members',
+            message: 'This resource is use-only for workspace members',
           }),
         );
 

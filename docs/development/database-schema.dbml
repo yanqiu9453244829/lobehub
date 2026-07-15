@@ -1842,7 +1842,7 @@ table resource_permissions {
   resource_type text [not null]
   resource_id text [not null]
   workspace_id text [not null]
-  access_level text [not null, default: 'edit']
+  access_level text [not null]
   created_by text
   accessed_at "timestamp with time zone" [not null, default: `now()`]
   created_at "timestamp with time zone" [not null, default: `now()`]
