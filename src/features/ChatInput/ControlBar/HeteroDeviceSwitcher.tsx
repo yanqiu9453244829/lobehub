@@ -25,6 +25,7 @@ import { memo, type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DOWNLOAD_URL } from '@/const/url';
+import { useChatInputResourceAccess } from '@/features/ChatInput/hooks/useChatInputResourceAccess';
 import { useSelectExecutionTarget } from '@/features/ChatInput/hooks/useSelectExecutionTarget';
 import { useWorkspaceAwareNavigate } from '@/features/Workspace/useWorkspaceAwareNavigate';
 import { resolveExecutionTarget } from '@/helpers/executionTarget';
@@ -58,6 +59,15 @@ const styles = createStaticStyles(({ css }) => ({
     &:hover {
       color: ${cssVar.colorText};
       background: ${cssVar.colorFillSecondary};
+    }
+  `,
+  buttonDisabled: css`
+    cursor: not-allowed;
+    opacity: 0.5;
+
+    &:hover {
+      color: ${cssVar.colorTextSecondary};
+      background: transparent;
     }
   `,
   buttonLabel: css`
@@ -345,6 +355,8 @@ const HeteroDeviceSwitcher = memo<HeteroDeviceSwitcherProps>(({ agentId }) => {
   const { t } = useTranslation('chat');
   const [open, setOpen] = useState(false);
   const navigate = useWorkspaceAwareNavigate();
+  const { canUseResource, isGroupContext } = useChatInputResourceAccess();
+  const viewOnly = !canUseResource;
 
   const sharedAgencyConfig = useAgentStore(agentByIdSelectors.getAgencyConfigById(agentId));
   const agentWorkspaceId = useAgentStore((s) => s.agentMap[agentId]?.workspaceId);
@@ -422,6 +434,9 @@ const HeteroDeviceSwitcher = memo<HeteroDeviceSwitcherProps>(({ agentId }) => {
   // default would clobber it.
   useEffect(() => {
     if (!isDesktop) return;
+    // View-only members must not write anything — not even the harmless
+    // per-user local-device default.
+    if (viewOnly) return;
     if (isWorkspacePreferenceLoading) return;
     if (agencyConfig?.executionTarget !== undefined) return;
     if (agencyConfig?.boundDeviceId !== undefined) return;
@@ -433,6 +448,7 @@ const HeteroDeviceSwitcher = memo<HeteroDeviceSwitcherProps>(({ agentId }) => {
     agencyConfig?.boundDeviceId,
     currentDeviceId,
     isWorkspacePreferenceLoading,
+    viewOnly,
   ]);
 
   // Don't render for remote hetero agents — they use RemoteAgentConfigCard in profile.
@@ -686,6 +702,23 @@ const HeteroDeviceSwitcher = memo<HeteroDeviceSwitcherProps>(({ agentId }) => {
     </Flexbox>
   );
 
+  const chip = (
+    <div className={cx(styles.button, viewOnly && styles.buttonDisabled)}>
+      {chipIcon}
+      <span className={styles.buttonLabel}>{chipLabel}</span>
+      <Icon icon={ChevronDownIcon} size={12} />
+    </div>
+  );
+
+  // View-level General access: the whole input area is read-only, so the
+  // execution-target picker stays visible but inert (disabled, not hidden).
+  if (viewOnly)
+    return (
+      <Tooltip title={t(isGroupContext ? 'input.viewOnlyGroup' : 'input.viewOnlyAgent')}>
+        {chip}
+      </Tooltip>
+    );
+
   return (
     <Popover
       content={content}
@@ -695,11 +728,7 @@ const HeteroDeviceSwitcher = memo<HeteroDeviceSwitcherProps>(({ agentId }) => {
       trigger="click"
       onOpenChange={setOpen}
     >
-      <div className={styles.button}>
-        {chipIcon}
-        <span className={styles.buttonLabel}>{chipLabel}</span>
-        <Icon icon={ChevronDownIcon} size={12} />
-      </div>
+      {chip}
     </Popover>
   );
 });

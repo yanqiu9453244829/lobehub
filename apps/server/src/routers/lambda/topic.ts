@@ -38,11 +38,22 @@ import { type BatchTaskResult } from '@/types/service';
 
 import { assertWorkspaceRowManageable } from './_helpers/assertWorkspaceRowManageable';
 import {
+  assertCanUseConversationTargets,
+  assertCanUseTopicTargets,
+} from './_helpers/conversationResourceGuard';
+import {
   batchResolveAgentIdFromSessions,
   resolveAgentIdFromSession,
   resolveContext,
 } from './_helpers/resolveContext';
 import { basicContextSchema } from './_schema/context';
+
+/** Ctx slice consumed by the conversation General-access guards. */
+const guardCtx = (ctx: {
+  serverDB: LobeChatDatabase;
+  userId: string;
+  workspaceId?: string | null;
+}) => ({ db: ctx.serverDB, userId: ctx.userId, workspaceId: ctx.workspaceId });
 
 const topicProcedure = wsCompatProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -189,6 +200,11 @@ export const topicRouter = router({
       ),
     )
     .mutation(async ({ input, ctx }): Promise<BatchTaskResult> => {
+      await assertCanUseConversationTargets(
+        guardCtx(ctx),
+        input.map((item) => ({ agentId: item.agentId, groupId: item.groupId })),
+      );
+
       // Resolve sessionId for each topic
       const resolvedTopics = await Promise.all(
         input.map(async (item) => {
@@ -267,6 +283,9 @@ export const topicRouter = router({
       for (const userId of new Set(rows.map((row) => row.userId))) {
         assertWorkspaceRowManageable(ctx, userId, 'topic');
       }
+      // Moving needs `use` on both the source conversations and the target agent.
+      await assertCanUseTopicTargets(guardCtx(ctx), input.topicIds);
+      await assertCanUseConversationTargets(guardCtx(ctx), [{ agentId: input.targetAgentId }]);
 
       return ctx.topicModel.batchMoveToAgent(input.topicIds, input.targetAgentId);
     }),
@@ -275,6 +294,7 @@ export const topicRouter = router({
     .use(withScopedPermission('topic:create'))
     .input(z.object({ id: z.string(), newTitle: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
+      await assertCanUseTopicTargets(guardCtx(ctx), [input.id]);
       const data = await ctx.topicModel.duplicate(input.id, input.newTitle);
 
       return data.topic.id;
@@ -311,6 +331,7 @@ export const topicRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { agentId, ...rest } = input;
+      await assertCanUseConversationTargets(guardCtx(ctx), [{ agentId, groupId: rest.groupId }]);
       const resolved = await resolveContext(
         { agentId, sessionId: rest.sessionId },
         ctx.serverDB,
@@ -538,6 +559,10 @@ export const topicRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
+      await assertCanUseConversationTargets(guardCtx(ctx), [
+        { agentId: input.agentId, groupId: input.groupId },
+      ]);
+
       return ctx.heteroSessionImporterRepo.importSessions({
         agentId: input.agentId,
         groupId: input.groupId,
@@ -555,6 +580,10 @@ export const topicRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
+      await assertCanUseConversationTargets(guardCtx(ctx), [
+        { agentId: input.agentId, groupId: input.groupId },
+      ]);
+
       const result = await ctx.topicImporterRepo.importTopic({
         agentId: input.agentId,
         data: input.data,
@@ -822,7 +851,11 @@ export const topicRouter = router({
     .mutation(async ({ input, ctx }) => {
       // Intentionally no creator/owner gate: shared topics are co-editable by
       // members (title/status/metadata); only delete/transfer is creator-scoped.
+      // Co-editing still requires `use`-level General access on the agent —
+      // view-only members are read-only.
+      await assertCanUseTopicTargets(guardCtx(ctx), [input.id]);
       const { agentId, ...restValue } = input.value;
+      if (agentId) await assertCanUseConversationTargets(guardCtx(ctx), [{ agentId }]);
 
       // If agentId is provided, resolve to sessionId
       let resolvedSessionId = restValue.sessionId;
@@ -851,6 +884,9 @@ export const topicRouter = router({
       // Intentionally no creator/owner gate: metadata follows the same
       // co-editable path as updateTopic (chat/tool flows write fields like
       // runningOperation on shared topics); only delete/transfer is gated.
+      // Co-editing still requires `use`-level General access on the agent.
+      await assertCanUseTopicTargets(guardCtx(ctx), [input.id]);
+
       return ctx.topicModel.updateMetadata(input.id, input.metadata);
     }),
 });
