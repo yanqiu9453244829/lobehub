@@ -3,10 +3,10 @@
 import { toast } from '@lobehub/ui/base-ui';
 import { memo, type ReactNode, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
 
 import AsyncBoundary from '@/components/AsyncBoundary';
 import Loading from '@/components/Loading/BrandTextLoading';
+import { useWorkspaceAwareNavigate } from '@/features/Workspace/useWorkspaceAwareNavigate';
 import { usePermission } from '@/hooks/usePermission';
 
 import { useResourceAccess } from './useResourceAccess';
@@ -21,7 +21,7 @@ interface ResourceConfigAccessGateProps {
 const ResourceConfigAccessGate = memo<ResourceConfigAccessGateProps>(
   ({ children, redirectPath, resourceId, resourceType }) => {
     const { t } = useTranslation('chat');
-    const navigate = useNavigate();
+    const navigate = useWorkspaceAwareNavigate();
     const hasRedirected = useRef(false);
     const { allowed: canEditContent } = usePermission('edit_own_content');
     const { accessError, canEditResource, isAccessResolved, isLoading, retryAccess } =
