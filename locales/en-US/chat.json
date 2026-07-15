@@ -1578,6 +1578,9 @@
   "workingPanel.skills.section.user": "User skills",
   "workingPanel.skills.title": "Skills",
   "workingPanel.space": "Space",
+  "workingPanel.tabs.add": "Add panel",
+  "workingPanel.tabs.close": "Close panel",
+  "workingPanel.tabs.label": "Open panels",
   "workingPanel.title": "Working Panel",
   "you": "You"
 }
