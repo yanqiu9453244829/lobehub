@@ -1,10 +1,10 @@
 import { ActionIcon, Flexbox } from '@lobehub/ui';
 import { createStaticStyles } from 'antd-style';
 import {
-  FileText,
   FolderOpen,
   GitCompareArrows,
   Globe,
+  LibraryBig,
   PanelRightCloseIcon,
   PanelsTopLeft,
   SlidersHorizontal,
@@ -179,7 +179,7 @@ const AgentWorkingSidebar = memo(() => {
   const toolTabs = useMemo<WorkingSidebarToolTab[]>(
     () => [
       ...businessTabs.map((tab) => ({ icon: PanelsTopLeft, key: tab.key, label: tab.label })),
-      { icon: FileText, key: 'resources', label: t('workingPanel.space') },
+      { icon: LibraryBig, key: 'resources', label: t('workingPanel.space') },
       ...(reviewAvailable
         ? [{ icon: GitCompareArrows, key: 'review', label: t('workingPanel.review.title') }]
         : []),
