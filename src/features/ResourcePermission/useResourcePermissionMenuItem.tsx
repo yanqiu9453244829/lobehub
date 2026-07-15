@@ -9,9 +9,14 @@ import { useResourcePermission } from './useResourcePermission';
 
 type MenuItem = NonNullable<MenuProps['items']>[number];
 
+interface ResourcePermissionMenuItemOptions {
+  showReadOnly?: boolean;
+}
+
 export const useResourcePermissionMenuItem = (
   resourceType: PermissionResourceType,
   resourceId?: string,
+  options: ResourcePermissionMenuItemOptions = {},
 ): MenuItem | null => {
   const { t } = useTranslation('setting');
   const { data, error, isLoading, setAccessLevel, updating } = useResourcePermission(
@@ -56,10 +61,21 @@ export const useResourcePermissionMenuItem = (
     return levels;
   }, [resourceType, t]);
 
-  if (!resourceId || !data?.canManage) return null;
+  if (!resourceId || !data || (!data.canManage && !options.showReadOnly)) return null;
 
   const accessLevel = data?.accessLevel;
   const selectedOption = accessOptions.find((option) => option.value === accessLevel);
+
+  if (!data.canManage) {
+    return {
+      disabled: true,
+      icon: selectedOption ? <Icon icon={selectedOption.icon} /> : <Icon icon={UsersIcon} />,
+      key: 'member-permissions',
+      label: selectedOption
+        ? t('permission.generalAccess.trigger', { level: selectedOption.label })
+        : t('permission.generalAccess.label'),
+    };
+  }
 
   return {
     children: accessOptions.map(({ desc, icon, label, value }) => ({

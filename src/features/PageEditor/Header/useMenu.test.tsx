@@ -11,6 +11,11 @@ const permissionMock = vi.hoisted(() => ({
   edit_own_content: true,
 }));
 
+const resourcePermissionMenuItemMock = vi.hoisted(() => ({
+  args: [] as unknown[],
+  item: null as null | { key: string; label: string },
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     i18n: {
@@ -75,7 +80,10 @@ vi.mock('@/features/VisibilityConfirmContent', () => ({
 }));
 
 vi.mock('@/features/ResourcePermission/useResourcePermissionMenuItem', () => ({
-  useResourcePermissionMenuItem: () => null,
+  useResourcePermissionMenuItem: (...args: unknown[]) => {
+    resourcePermissionMenuItemMock.args = args;
+    return resourcePermissionMenuItemMock.item;
+  },
 }));
 
 vi.mock('@/hooks/usePermission', () => ({
@@ -161,6 +169,22 @@ describe('PageEditor header menu', () => {
   beforeEach(() => {
     permissionMock.create_content = true;
     permissionMock.edit_own_content = true;
+    resourcePermissionMenuItemMock.args = [];
+    resourcePermissionMenuItemMock.item = null;
+  });
+
+  it('places workspace member permission settings in the overflow menu', () => {
+    resourcePermissionMenuItemMock.item = {
+      key: 'member-permissions',
+      label: 'Members: Can view',
+    };
+
+    const { result } = renderHook(() => useMenu());
+
+    expect(getMenuItem(result.current.menuItems, 'member-permissions')).toMatchObject({
+      label: 'Members: Can view',
+    });
+    expect(resourcePermissionMenuItemMock.args[2]).toEqual({ showReadOnly: true });
   });
 
   it('disables mutating page actions for workspace viewers', () => {

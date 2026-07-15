@@ -54,22 +54,34 @@ const CHAT_ONLY_ACTIONS = new Set<ActionKey>([
   'fileUpload',
   'history',
   'mention',
+  'model',
+  'modelLabel',
   'plus',
   'promptTransform',
   'typo',
 ]);
+
+const normalizeChatOnlyAction = (action: ActionKey): ActionKey =>
+  action === 'model' ? 'modelLabel' : action;
 
 export const filterChatOnlyActions = (actions: ActionKeys[]): ActionKeys[] => {
   const visibleActions: ActionKeys[] = [];
 
   for (const action of actions) {
     if (Array.isArray(action)) {
-      const visibleGroup = action.filter((item) => CHAT_ONLY_ACTIONS.has(item));
+      const visibleGroup = action
+        .filter((item) => CHAT_ONLY_ACTIONS.has(item))
+        .map(normalizeChatOnlyAction);
       if (visibleGroup.length > 0) visibleActions.push(visibleGroup);
       continue;
     }
 
-    if (action === '---' || CHAT_ONLY_ACTIONS.has(action)) visibleActions.push(action);
+    if (action === '---') {
+      visibleActions.push(action);
+      continue;
+    }
+
+    if (CHAT_ONLY_ACTIONS.has(action)) visibleActions.push(normalizeChatOnlyAction(action));
   }
 
   return visibleActions;

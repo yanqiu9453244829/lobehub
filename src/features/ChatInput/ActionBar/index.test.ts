@@ -14,10 +14,11 @@ describe('filterChatOnlyActions', () => {
         '---',
         ['typo', 'params', 'clear'],
       ]),
-    ).toEqual(['fileUpload', '---', ['typo', 'clear']]);
+    ).toEqual(['modelLabel', 'fileUpload', '---', ['typo', 'clear']]);
   });
 
-  it('keeps the unified attachments menu but hides the model selector', () => {
-    expect(filterChatOnlyActions(['model', 'plus'])).toEqual(['plus']);
+  it('shows the current model label instead of an icon-only selector for chat-only members', () => {
+    expect(filterChatOnlyActions(['model', 'plus'])).toEqual(['modelLabel', 'plus']);
+    expect(filterChatOnlyActions(['modelLabel', 'plus'])).toEqual(['modelLabel', 'plus']);
   });
 });

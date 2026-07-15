@@ -82,6 +82,7 @@ export const useMenu = (): { menuItems: any[] } => {
   const memberPermissionMenuItem = useResourcePermissionMenuItem(
     'document',
     activeWorkspaceId && pageDocument?.visibility === 'public' ? documentId : undefined,
+    { showReadOnly: true },
   ) as DropdownItem | null;
 
   const [togglePageAgentPanel, wideScreen, toggleWideScreen] = useGlobalStore((s) => [
