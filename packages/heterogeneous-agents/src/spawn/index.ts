@@ -46,6 +46,8 @@ export {
   createFileStoreImageUploader,
   type FileStoreCreateFileInput,
   type FileStorePort,
+  uploadBufferToFileStore,
+  type UploadBufferToFileStoreParams,
 } from './fileStoreImageUploader';
 export {
   type AgentContentBlock,
