@@ -522,6 +522,12 @@ describe('MessengerRouter channel @mention', () => {
       'user_alice',
       'workspace-1',
     );
+    expect(mockGetBotFeatureAccessState).toHaveBeenCalledWith({
+      action: 'runtime',
+      platform: 'slack',
+      userId: 'user_alice',
+      workspaceId: 'workspace-1',
+    });
     expect(mockHandleMention.mock.calls[0][2]).toMatchObject({ agentId: 'agt_main' });
     expect(mockHandleSubscribed).not.toHaveBeenCalled();
     // We deliberately do NOT subscribe channel threads — see comment in

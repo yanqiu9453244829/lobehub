@@ -548,6 +548,7 @@ export class MessengerRouter {
           action: 'runtime',
           platform,
           userId: link.userId,
+          workspaceId: link.workspaceId ?? undefined,
         });
         if (!featureAccess.allowed) {
           await replyToSender(
