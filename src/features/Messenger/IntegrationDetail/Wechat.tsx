@@ -1,9 +1,9 @@
 'use client';
 
 import { InfoCircleOutlined } from '@ant-design/icons';
-import { Alert, Block, Flexbox, Icon, Text } from '@lobehub/ui';
+import { Alert, Block, Flexbox, Icon, Image, Text } from '@lobehub/ui';
 import { Button } from '@lobehub/ui/base-ui';
-import { App, QRCode } from 'antd';
+import { App } from 'antd';
 import { createStaticStyles } from 'antd-style';
 import { ExternalLinkIcon, QrCodeIcon, RefreshCwIcon, XIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -27,6 +27,14 @@ import {
 const QR_POLL_INTERVAL_MS = 2000;
 const QR_SIZE = 220;
 const QR_SLOT_SIZE = 240;
+
+export const resolveWechatQrImageSource = (imageContent: string) => {
+  const source = imageContent.trim();
+
+  if (/^(?:data:image\/|https?:\/\/)/i.test(source)) return source;
+
+  return `data:image/png;base64,${source}`;
+};
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   error: css`
@@ -179,7 +187,15 @@ const WechatQrSetup = memo<WechatQrSetupProps>(({ autoStart, disabled, onCancel,
             </Button>
           )}
           {state.stage === 'loading' && <NeuralNetworkLoading size={48} />}
-          {state.stage === 'ready' && <QRCode size={QR_SIZE} value={state.imageContent} />}
+          {state.stage === 'ready' && (
+            <Image
+              alt={t('messenger.wechat.setupTitle')}
+              height={QR_SIZE}
+              preview={false}
+              src={resolveWechatQrImageSource(state.imageContent)}
+              width={QR_SIZE}
+            />
+          )}
           {state.stage === 'error' && (
             <Flexbox className={styles.error} gap={12}>
               <Alert showIcon message={state.message} type="warning" />
@@ -216,6 +232,8 @@ const WechatQrSetup = memo<WechatQrSetupProps>(({ autoStart, disabled, onCancel,
   );
 });
 WechatQrSetup.displayName = 'MessengerWechatQrSetup';
+
+export { WechatQrSetup };
 
 interface WechatDetailProps {
   access?: {
