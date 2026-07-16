@@ -338,6 +338,34 @@ describe('messengerRouter.pollWechatQrSession', () => {
     );
   });
 
+  it('falls back to the personal LobeAI agent when a rescan preserves a stale agent', async () => {
+    mockFindByPlatform.mockResolvedValueOnce({
+      activeAgentId: 'agent-deleted',
+      platformUserId: 'wechat-user',
+    });
+    const staleAgentBuilder = createSelectBuilder([]);
+    const inboxAgentBuilder = createSelectBuilder([
+      { id: 'agent-inbox', title: 'LobeAI', userId: 'user-1', workspaceId: null },
+    ]);
+    const serverDB = {
+      select: vi.fn().mockReturnValueOnce(staleAgentBuilder).mockReturnValueOnce(inboxAgentBuilder),
+      transaction: vi.fn(),
+    };
+    serverDB.transaction.mockImplementation(async (callback: (tx: typeof serverDB) => unknown) =>
+      callback(serverDB),
+    );
+    mockGetServerDB.mockResolvedValue(serverDB);
+
+    const caller = createCaller(await createContextInner({ userId: 'user-1' }));
+    await expect(caller.pollWechatQrSession({ sessionId: 'session-1' })).resolves.toMatchObject({
+      status: 'confirmed',
+    });
+
+    expect(mockUpsertForPlatform).toHaveBeenCalledWith(
+      expect.objectContaining({ activeAgentId: 'agent-inbox', workspaceId: null }),
+    );
+  });
+
   it('rolls back the persisted connection when the Message Gateway poller cannot start', async () => {
     const selectBuilder = createSelectBuilder([
       { id: 'agent-inbox', title: 'LobeAI', userId: 'user-1', workspaceId: null },

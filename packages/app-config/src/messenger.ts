@@ -7,6 +7,8 @@ import {
   type DecryptedSystemBotProvider,
   SystemBotProviderModel,
 } from '@/database/models/systemBotProvider';
+import { gatewayEnv } from '@/envs/gateway';
+import { redisEnv } from '@/envs/redis';
 import { KeyVaultsGateKeeper } from '@/server/modules/KeyVaultsEncrypt';
 
 const log = debug('lobe-server:messenger:config');
@@ -169,6 +171,19 @@ export const getMessengerDiscordConfig = async (): Promise<MessengerDiscordConfi
 };
 
 export const getMessengerWechatConfig = async (): Promise<MessengerWechatConfig | null> => {
+  // WeChat owns a long-polling connection in the Message Gateway, with Redis
+  // backing its QR session and per-user connection state. Do not advertise an
+  // enabled provider until the runtime can actually complete that lifecycle.
+  if (
+    gatewayEnv.MESSAGE_GATEWAY_ENABLED !== '1' ||
+    !gatewayEnv.MESSAGE_GATEWAY_URL ||
+    !gatewayEnv.MESSAGE_GATEWAY_SERVICE_TOKEN ||
+    !redisEnv.REDIS_URL ||
+    process.env.DISABLE_REDIS
+  ) {
+    return null;
+  }
+
   return fetchAndCache<MessengerWechatConfig>('wechat', () => ({ enabled: true }));
 };
 

@@ -376,15 +376,31 @@ export const messengerRouter = router({
         }
 
         // A first scan should be immediately usable, so route it to the user's
-        // personal inbox (LobeAI). A rescan preserves any existing Agent choice;
-        // an older agent-less link is repaired by the same LobeAI fallback.
-        const activeAgentId =
-          existingUserLink?.activeAgentId ??
-          (await ctx.getAgentModel().getBuiltinAgent(INBOX_SESSION_ID))?.id ??
-          null;
-        const workspaceId = activeAgentId
-          ? (await resolveAuthorizedAgentScope(ctx.serverDB, ctx.userId, activeAgentId)).workspaceId
-          : null;
+        // personal inbox (LobeAI). A rescan preserves an authorized Agent
+        // choice, but repairs stale/deauthorized links with the same fallback.
+        const inboxAgentId =
+          (await ctx.getAgentModel().getBuiltinAgent(INBOX_SESSION_ID))?.id ?? null;
+        let activeAgentId = existingUserLink?.activeAgentId ?? inboxAgentId;
+        let workspaceId: string | null = null;
+
+        if (activeAgentId) {
+          try {
+            workspaceId = (
+              await resolveAuthorizedAgentScope(ctx.serverDB, ctx.userId, activeAgentId)
+            ).workspaceId;
+          } catch (error) {
+            const isStaleAgent =
+              error instanceof TRPCError &&
+              (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN');
+            if (!isStaleAgent || activeAgentId === inboxAgentId) throw error;
+
+            activeAgentId = inboxAgentId;
+            workspaceId = activeAgentId
+              ? (await resolveAuthorizedAgentScope(ctx.serverDB, ctx.userId, activeAgentId))
+                  .workspaceId
+              : null;
+          }
+        }
         const gateKeeper = await KeyVaultsGateKeeper.initWithEnvKey();
         const existingInstallationForAccount = await MessengerInstallationModel.findByTenant(
           ctx.serverDB,

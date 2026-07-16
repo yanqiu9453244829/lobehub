@@ -567,7 +567,7 @@ export interface MessengerInfo {
   platform: string;
   /** OAuth scope string granted at install time (Slack-only typically). */
   scope?: string;
-  /** Tenant identifier — Slack workspace, Discord guild, … (empty for Telegram). */
+  /** Tenant identifier — Slack workspace, Discord guild, WeChat user, … (empty for Telegram). */
   tenantId: string;
   /** Optional human-friendly tenant label (workspace / guild name). */
   tenantName?: string;
@@ -583,11 +583,11 @@ export interface MessengerLinkInfo {
   /** When the link was created. */
   createdAt?: string | Date;
   platform: string;
-  /** Platform-side user id (Slack user id, Discord user id, Telegram chat id). */
+  /** Platform-side user id (Slack/Discord user id, Telegram chat id, WeChat user id). */
   platformUserId?: string;
   /** Display name surfaced when verify-im completed. */
   platformUsername?: string;
-  /** Tenant scope for the link — empty for global-bot platforms (Telegram). */
+  /** Tenant scope for the link — empty for single-link platforms (Telegram / WeChat). */
   tenantId?: string;
 }
 
