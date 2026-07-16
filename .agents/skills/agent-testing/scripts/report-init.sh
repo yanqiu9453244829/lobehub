@@ -6,6 +6,9 @@
 # Usage:
 #   report-init.sh <slug> [title]
 #
+# Run this from the CONSUMER repo root — the report is created relative to the
+# current working directory, not relative to this script's own location.
+#
 # Prints the report directory path (capture it: DIR=$(report-init.sh my-test)).
 
 set -euo pipefail
@@ -13,7 +16,7 @@ set -euo pipefail
 SLUG="${1:?Usage: report-init.sh <slug> [title]}"
 TITLE="${2:-$SLUG}"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+REPO_ROOT="$(pwd)"
 TS="$(date +%Y%m%d-%H%M%S)"
 DIR="$REPO_ROOT/.records/reports/$TS-$SLUG"
 mkdir -p "$DIR/assets"
