@@ -479,9 +479,7 @@ export const callTool =
       const legacyAgentInvocationStateType = executionResult.state?.type as string | undefined;
       const isLegacyAgentInvocationState =
         legacyAgentInvocationStateType === 'execSubAgent' ||
-        legacyAgentInvocationStateType === 'execSubAgents' ||
-        legacyAgentInvocationStateType === 'execClientSubAgent' ||
-        legacyAgentInvocationStateType === 'execClientSubAgents';
+        legacyAgentInvocationStateType === 'execSubAgents';
 
       if (executionResult.stop && !isLegacyAgentInvocationState) {
         newState.status = 'done';
