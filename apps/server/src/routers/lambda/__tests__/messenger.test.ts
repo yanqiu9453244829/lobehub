@@ -7,41 +7,94 @@ import { createContextInner } from '@/libs/trpc/lambda/context';
 import { messengerRouter } from '../messenger';
 
 const {
+  mockAcquireWechatQrFinalizeLock,
+  mockAssertBotFeatureAccess,
   mockConsumeLinkToken,
+  mockConsumeWechatQrSession,
+  mockDeleteByPlatform,
+  mockEnsureUserMessengerConnected,
   mockFindByPlatform,
   mockFindByPlatformUser,
+  mockFindInstallationByTenant,
+  mockGetBotRuntimeStatus,
+  mockGetBuiltinAgent,
+  mockGetAgentRuntimeRedisClient,
   mockGetServerDB,
   mockGetServerFeatureFlagsStateFromRuntimeConfig,
   mockHasAnyPermission,
   mockInitWithEnvKey,
+  mockIsMessengerPlatformEnabled,
   mockListUserWorkspaces,
   mockListByInstallerUserId,
   mockMarkRevoked,
   mockNotifyTelegramLinkSuccess,
+  mockPeekWechatQrSession,
   mockPeekConsumedLinkToken,
   mockPeekLinkToken,
+  mockPollQrStatus,
+  mockReleaseWechatQrFinalizeLock,
   mockSlackAuthTest,
+  mockUpsertInstallation,
   mockUpsertForPlatform,
 } = vi.hoisted(() => ({
+  mockAcquireWechatQrFinalizeLock: vi.fn(),
+  mockAssertBotFeatureAccess: vi.fn(),
   mockConsumeLinkToken: vi.fn(),
+  mockConsumeWechatQrSession: vi.fn(),
+  mockDeleteByPlatform: vi.fn(),
+  mockEnsureUserMessengerConnected: vi.fn(),
   mockFindByPlatform: vi.fn(),
   mockFindByPlatformUser: vi.fn(),
+  mockFindInstallationByTenant: vi.fn(),
+  mockGetBotRuntimeStatus: vi.fn(),
+  mockGetBuiltinAgent: vi.fn(),
+  mockGetAgentRuntimeRedisClient: vi.fn(),
   mockGetServerDB: vi.fn(),
   mockGetServerFeatureFlagsStateFromRuntimeConfig: vi.fn(),
   mockHasAnyPermission: vi.fn(),
   mockInitWithEnvKey: vi.fn(),
+  mockIsMessengerPlatformEnabled: vi.fn(),
   mockListUserWorkspaces: vi.fn(),
   mockListByInstallerUserId: vi.fn(),
   mockMarkRevoked: vi.fn(),
   mockNotifyTelegramLinkSuccess: vi.fn(),
+  mockPeekWechatQrSession: vi.fn(),
   mockPeekConsumedLinkToken: vi.fn(),
   mockPeekLinkToken: vi.fn(),
+  mockPollQrStatus: vi.fn(),
+  mockReleaseWechatQrFinalizeLock: vi.fn(),
   mockSlackAuthTest: vi.fn(),
+  mockUpsertInstallation: vi.fn(),
   mockUpsertForPlatform: vi.fn(),
+}));
+
+vi.mock('@lobechat/chat-adapter-wechat', () => ({
+  fetchQrCode: vi.fn(),
+  pollQrStatus: mockPollQrStatus,
+}));
+
+vi.mock('@/business/server/bot/featureAccess', () => ({
+  assertBotFeatureAccess: mockAssertBotFeatureAccess,
+  withBotPlatformAccessMeta: vi.fn((platforms) => platforms),
+}));
+
+vi.mock('@/config/messenger', () => ({
+  getEnabledMessengerPlatforms: vi.fn().mockResolvedValue([]),
+  getMessengerDiscordConfig: vi.fn(),
+  getMessengerSlackConfig: vi.fn(),
+  getMessengerTelegramConfig: vi.fn(),
+  isMessengerPlatformEnabled: mockIsMessengerPlatformEnabled,
 }));
 
 vi.mock('@/database/core/db-adaptor', () => ({
   getServerDB: mockGetServerDB,
+}));
+
+vi.mock('@/database/models/agent', () => ({
+  AgentModel: class {
+    getBuiltinAgent = (...args: unknown[]) => mockGetBuiltinAgent(...args);
+    listMessengerBindableAgents = vi.fn();
+  },
 }));
 
 vi.mock('@/database/models/workspace', () => ({
@@ -59,16 +112,20 @@ vi.mock('@/database/models/rbac', () => ({
 vi.mock('@/database/models/messengerInstallation', () => ({
   MessengerInstallationModel: {
     findById: vi.fn(),
+    findByTenant: mockFindInstallationByTenant,
     listByInstallerUserId: mockListByInstallerUserId,
     markRevoked: mockMarkRevoked,
+    upsert: mockUpsertInstallation,
   },
 }));
 
 vi.mock('@/database/models/messengerAccountLink', () => ({
   MessengerAccountLinkConflictError: class MessengerAccountLinkConflictError extends Error {},
+  MessengerAccountLinkRelinkRequiredError: class MessengerAccountLinkRelinkRequiredError extends Error {},
   MessengerAccountLinkModel: class MessengerAccountLinkModel {
     static findByPlatformUser = mockFindByPlatformUser;
 
+    deleteByPlatform = mockDeleteByPlatform;
     findByPlatform = mockFindByPlatform;
     upsertForPlatform = mockUpsertForPlatform;
   },
@@ -80,12 +137,18 @@ vi.mock('@/server/modules/KeyVaultsEncrypt', () => ({
   },
 }));
 
+vi.mock('@/server/modules/AgentRuntime/redis', () => ({
+  getAgentRuntimeRedisClient: mockGetAgentRuntimeRedisClient,
+}));
+
 vi.mock('@/server/featureFlags', () => ({
   getServerFeatureFlagsStateFromRuntimeConfig: mockGetServerFeatureFlagsStateFromRuntimeConfig,
 }));
 
 vi.mock('@/server/services/messenger', () => ({
+  acquireWechatQrFinalizeLock: mockAcquireWechatQrFinalizeLock,
   consumeLinkToken: mockConsumeLinkToken,
+  consumeWechatQrSession: mockConsumeWechatQrSession,
   MessengerDiscordBinder: vi.fn(),
   messengerPlatformRegistry: {
     listSerializedPlatforms: vi.fn().mockReturnValue([]),
@@ -94,8 +157,25 @@ vi.mock('@/server/services/messenger', () => ({
   MessengerTelegramBinder: vi.fn().mockImplementation(() => ({
     notifyLinkSuccess: mockNotifyTelegramLinkSuccess,
   })),
+  peekWechatQrSession: mockPeekWechatQrSession,
   peekConsumedLinkToken: mockPeekConsumedLinkToken,
   peekLinkToken: mockPeekLinkToken,
+  releaseWechatQrFinalizeLock: mockReleaseWechatQrFinalizeLock,
+}));
+
+vi.mock('@/server/services/gateway', () => ({
+  GatewayService: class {
+    disconnectUserMessenger = vi.fn();
+    ensureUserMessengerConnected = mockEnsureUserMessengerConnected;
+  },
+}));
+
+vi.mock('@/server/services/gateway/runtimeStatus', () => ({
+  getBotRuntimeStatus: mockGetBotRuntimeStatus,
+}));
+
+vi.mock('@/server/services/messenger/installations', () => ({
+  wechatInstallationKey: (tenantId: string) => `wechat:${tenantId}`,
 }));
 
 vi.mock('@/server/services/bot/platforms/slack/api', () => ({
@@ -192,6 +272,96 @@ describe('messengerRouter.listMyInstallations', () => {
 
     expect(result).toHaveLength(1);
     expect(mockMarkRevoked).not.toHaveBeenCalled();
+  });
+});
+
+describe('messengerRouter.pollWechatQrSession', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsMessengerPlatformEnabled.mockResolvedValue(true);
+    mockAssertBotFeatureAccess.mockResolvedValue(undefined);
+    mockPeekWechatQrSession.mockResolvedValue({ qrcode: 'qr-code', userId: 'user-1' });
+    mockPollQrStatus.mockResolvedValue({
+      baseurl: 'https://ilink.example.com',
+      bot_token: 'bot-token',
+      ilink_bot_id: 'wechat-bot',
+      ilink_user_id: 'wechat-user',
+      status: 'confirmed',
+    });
+    mockAcquireWechatQrFinalizeLock.mockResolvedValue('lock-token');
+    mockFindByPlatformUser.mockResolvedValue(undefined);
+    mockFindByPlatform.mockResolvedValue(undefined);
+    mockGetBuiltinAgent.mockResolvedValue({ id: 'agent-inbox' });
+    mockInitWithEnvKey.mockResolvedValue(undefined);
+    mockFindInstallationByTenant.mockResolvedValue(undefined);
+    mockListByInstallerUserId.mockResolvedValue([]);
+    mockUpsertInstallation.mockResolvedValue({
+      applicationId: 'wechat-bot',
+      createdAt: new Date('2026-07-17T00:00:00.000Z'),
+      id: 'installation-1',
+      platform: 'wechat',
+      tenantId: 'wechat-user',
+    });
+    mockUpsertForPlatform.mockResolvedValue({
+      activeAgentId: 'agent-inbox',
+      id: 'link-1',
+      workspaceId: null,
+    });
+    mockEnsureUserMessengerConnected.mockResolvedValue('messenger:wechat:wechat-user:user-user-1');
+    mockGetAgentRuntimeRedisClient.mockReturnValue(null);
+    mockGetBotRuntimeStatus.mockResolvedValue({ status: 'connected' });
+    mockConsumeWechatQrSession.mockResolvedValue(undefined);
+  });
+
+  it('routes a first WeChat connection to the personal LobeAI agent', async () => {
+    const selectBuilder = createSelectBuilder([
+      { id: 'agent-inbox', title: 'LobeAI', userId: 'user-1', workspaceId: null },
+    ]);
+    const serverDB = {
+      select: vi.fn(() => selectBuilder),
+      transaction: vi.fn(),
+    };
+    serverDB.transaction.mockImplementation(async (callback: (tx: typeof serverDB) => unknown) =>
+      callback(serverDB),
+    );
+    mockGetServerDB.mockResolvedValue(serverDB);
+
+    const caller = createCaller(await createContextInner({ userId: 'user-1' }));
+    const result = await caller.pollWechatQrSession({ sessionId: 'session-1' });
+
+    expect(result).toMatchObject({
+      link: { activeAgentId: 'agent-inbox', workspaceId: null },
+      status: 'confirmed',
+    });
+    expect(mockUpsertForPlatform).toHaveBeenCalledWith(
+      expect.objectContaining({ activeAgentId: 'agent-inbox', workspaceId: null }),
+    );
+  });
+
+  it('rolls back the persisted connection when the Message Gateway poller cannot start', async () => {
+    const selectBuilder = createSelectBuilder([
+      { id: 'agent-inbox', title: 'LobeAI', userId: 'user-1', workspaceId: null },
+    ]);
+    const serverDB = {
+      select: vi.fn(() => selectBuilder),
+      transaction: vi.fn(),
+    };
+    serverDB.transaction.mockImplementation(async (callback: (tx: typeof serverDB) => unknown) =>
+      callback(serverDB),
+    );
+    mockGetServerDB.mockResolvedValue(serverDB);
+    mockEnsureUserMessengerConnected.mockResolvedValueOnce(null);
+
+    const caller = createCaller(await createContextInner({ userId: 'user-1' }));
+
+    await expect(caller.pollWechatQrSession({ sessionId: 'session-1' })).rejects.toMatchObject({
+      code: 'BAD_GATEWAY',
+      message: 'messenger.wechat.error.connectionFailed',
+    });
+    expect(mockDeleteByPlatform).toHaveBeenCalledWith('wechat', 'wechat-user');
+    expect(mockMarkRevoked).toHaveBeenCalledWith(serverDB, 'installation-1');
+    expect(mockConsumeWechatQrSession).not.toHaveBeenCalled();
+    expect(mockReleaseWechatQrFinalizeLock).toHaveBeenCalledWith('session-1', 'lock-token');
   });
 });
 

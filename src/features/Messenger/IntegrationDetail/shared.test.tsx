@@ -28,7 +28,23 @@ vi.mock('@lobehub/ui', () => ({
   Tag: ({ children }: { children?: ReactNode }) => (
     <span data-testid="personal-tag">{children}</span>
   ),
-  Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  Text: ({
+    children,
+    ellipsis,
+  }: {
+    children?: ReactNode;
+    ellipsis?: boolean | { tooltip?: boolean | string };
+  }) => (
+    <span
+      title={
+        typeof ellipsis === 'object' && typeof ellipsis.tooltip === 'string'
+          ? ellipsis.tooltip
+          : undefined
+      }
+    >
+      {children}
+    </span>
+  ),
 }));
 
 vi.mock('@lobehub/ui/base-ui', () => ({
@@ -74,6 +90,7 @@ vi.mock('antd-style', () => ({
     card: 'card',
     emptyRow: 'emptyRow',
     rowIcon: 'rowIcon',
+    rowIdentity: 'rowIdentity',
     scopeValue: 'scopeValue',
   }),
 }));
@@ -128,10 +145,31 @@ vi.mock('@/store/user', () => ({
 }));
 
 vi.mock('../AgentSelect', () => ({
-  default: () => <div data-testid="agent-select" />,
+  default: ({ defaultToInbox }: { defaultToInbox?: boolean }) => (
+    <div data-default-to-inbox={defaultToInbox} data-testid="agent-select" />
+  ),
 }));
 
 describe('Messenger UserAgentConnection', () => {
+  it('hides an opaque platform ID and exposes it through the account title tooltip', () => {
+    render(
+      <UserAgentConnection
+        extraLabel="WeChat account"
+        link={{
+          activeAgentId: null,
+          platformUserId: 'opaque-wechat-user-id',
+          platformUsername: null,
+          workspaceId: null,
+        }}
+        onSetActive={vi.fn()}
+        onUnlink={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('WeChat account')).toHaveAttribute('title', 'ID opaque-wechat-user-id');
+    expect(screen.queryByText('ID opaque-wechat-user-id')).not.toBeInTheDocument();
+  });
+
   it('uses the signed-in full name for the personal scope and shows the personal tag', () => {
     render(
       <UserAgentConnection
@@ -153,5 +191,22 @@ describe('Messenger UserAgentConnection', () => {
     expect(within(personalOption).getByTestId('personal-tag')).toHaveTextContent('personal');
     expect(within(personalOption).queryByText('个人')).not.toBeInTheDocument();
     expect(screen.getByTestId('scope-select')).toHaveAttribute('data-value-class', 'scopeValue');
+  });
+
+  it('defaults an agent-less personal connection to LobeAI', () => {
+    render(
+      <UserAgentConnection
+        link={{
+          activeAgentId: null,
+          platformUserId: 'platform-user',
+          platformUsername: 'platform-name',
+          workspaceId: null,
+        }}
+        onSetActive={vi.fn()}
+        onUnlink={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('agent-select')).toHaveAttribute('data-default-to-inbox', 'true');
   });
 });

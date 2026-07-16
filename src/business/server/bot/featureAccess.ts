@@ -1,5 +1,3 @@
-import type { SerializedPlatformDefinition } from '@/server/services/bot/platforms/types';
-
 export interface BotFeatureAccessParams {
   action?: 'manage' | 'runtime';
   applicationId?: string;
@@ -53,7 +51,7 @@ export function getBotFeatureBlockedMessage(
   return 'This bot channel is not available for your current plan.';
 }
 
-export async function withBotPlatformAccessMeta<T extends SerializedPlatformDefinition>(
+export async function withBotPlatformAccessMeta<T extends { id: string }>(
   platform: T,
   _params: { userId: string; workspaceId?: string },
 ): Promise<T & { access?: BotPlatformAccessMeta }> {

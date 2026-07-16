@@ -8,6 +8,7 @@ import {
 } from 'chat';
 import debug from 'debug';
 
+import { getBotFeatureAccessState } from '@/business/server/bot/featureAccess';
 import type { MessengerPlatform } from '@/config/messenger';
 import { getServerDB } from '@/database/core/db-adaptor';
 import { AgentModel } from '@/database/models/agent';
@@ -22,6 +23,7 @@ import { AgentBridgeService } from '@/server/services/bot/AgentBridgeService';
 import { buildBotContext } from '@/server/services/bot/buildBotContext';
 import { submitBotFeedback } from '@/server/services/bot/feedbackSubmit';
 import type { PlatformClient } from '@/server/services/bot/platforms';
+import { getBotReplyLocale } from '@/server/services/bot/platforms/const';
 import {
   renderCommandReply,
   renderFeedbackSubmitted,
@@ -31,6 +33,7 @@ import {
 import { getInstallationStore } from './installations';
 import type { InstallationCredentials } from './installations/types';
 import { messengerPlatformRegistry } from './platforms';
+import { getMessengerSystemStrings } from './systemReply';
 import type {
   AgentPickerEntry,
   CallbackAcknowledgement,
@@ -47,6 +50,7 @@ const log = debug('lobe-server:messenger:router');
  * are generated nanoids, so they never collide with this literal.
  */
 const PERSONAL_SCOPE_ID = 'personal';
+const WECHAT_UNSUPPORTED_COMMANDS = new Set(['start']);
 
 interface RegisteredMessengerBot {
   binder: MessengerPlatformBinder;
@@ -125,16 +129,6 @@ interface MessengerCommand {
     required?: boolean;
   }>;
 }
-
-const HELP_TEXT = [
-  'Commands:',
-  '• /start — bind (or rebind) your LobeHub account',
-  '• /switch — switch the active scope (personal or a workspace)',
-  '• /agents — list your agents and switch the active one',
-  '• /new — start a new conversation',
-  '• /stop — stop the current execution',
-  '• /feedback <message> — send feedback to the LobeHub team (no AI reply)',
-].join('\n');
 
 /**
  * Pull the Discord interaction id + token off a chat-sdk slash event so
@@ -231,10 +225,15 @@ export class MessengerRouter {
   private bots = new Map<string, RegisteredMessengerBot>();
   private loadingPromises = new Map<string, Promise<RegisteredMessengerBot | null>>();
 
-  /** Static command registry — reused across every install since command
-   *  logic is platform-agnostic. Handlers reach platform-specific reply
-   *  surfaces through `ctx.reply` and `ctx.binder`. */
+  /** Static command registry. Platform capability filters are applied when
+   *  commands are registered and dispatched (WeChat, for example, binds via
+   *  web QR and therefore does not expose `/start`). */
   private readonly commands: MessengerCommand[] = this.buildCommands();
+
+  private getCommandsForPlatform(platform: MessengerPlatform): MessengerCommand[] {
+    if (platform !== 'wechat') return this.commands;
+    return this.commands.filter((command) => !WECHAT_UNSUPPORTED_COMMANDS.has(command.name));
+  }
 
   /**
    * Webhook handler for `/api/agent/messenger/webhooks/[platform]`. The flow:
@@ -375,9 +374,10 @@ export class MessengerRouter {
     await chatBot.initialize();
 
     if (client.registerBotCommands) {
+      const commands = this.getCommandsForPlatform(creds.platform);
       client
         .registerBotCommands(
-          this.commands.map((cmd) => ({
+          commands.map((cmd) => ({
             command: cmd.name,
             description: cmd.description,
             // Forward the option schema so Discord/Slack surface required
@@ -432,6 +432,8 @@ export class MessengerRouter {
   ): void {
     const platform = creds.platform;
     const tenantId = creds.tenantId;
+    const commands = this.getCommandsForPlatform(platform);
+    const systemStrings = getMessengerSystemStrings(platform);
 
     const handle = async (
       thread: any,
@@ -454,6 +456,18 @@ export class MessengerRouter {
       // the platform's thread anchor (Slack: `slack:<channel>:<threadTs>`)
       // which the binder splits when posting in-thread.
       const isChannelMention = thread.isDM === false;
+      const channelThreadTs = isChannelMention ? String(thread.id).split(':')[2] : undefined;
+      const replyToSender = (text: string): Promise<void> => {
+        if (isChannelMention && binder.replyEphemeral) {
+          return binder.replyEphemeral({
+            channelId: chatId,
+            text,
+            threadTs: channelThreadTs,
+            userId: senderId,
+          });
+        }
+        return binder.sendDmText(chatId, text);
+      };
       const link = await MessengerAccountLinkModel.findByPlatformUser(
         serverDB,
         platform,
@@ -464,7 +478,7 @@ export class MessengerRouter {
       try {
         const parsed = parseCommand(message.text);
         if (parsed) {
-          const command = this.commands.find((c) => c.name === parsed.name);
+          const command = commands.find((c) => c.name === parsed.name);
           if (command) {
             // Text-path command reply: in a DM `chat.postMessage` is fine
             // (the conversation is private already). In a channel `@mention`
@@ -474,17 +488,6 @@ export class MessengerRouter {
             // mention's thread (Slack `thread_ts`) so the response sits next
             // to the trigger. Platforms without `replyEphemeral` (Telegram)
             // fall back to the regular DM path.
-            const channelThreadTs = isChannelMention ? String(thread.id).split(':')[2] : undefined;
-            const reply =
-              isChannelMention && binder.replyEphemeral
-                ? (text: string) =>
-                    binder.replyEphemeral!({
-                      channelId: chatId,
-                      text,
-                      threadTs: channelThreadTs,
-                      userId: senderId,
-                    })
-                : (text: string) => binder.sendDmText(chatId, text);
             await command.handler({
               args: parsed.args,
               authorUserId: senderId,
@@ -495,7 +498,7 @@ export class MessengerRouter {
               link,
               message,
               platform,
-              reply,
+              reply: replyToSender,
               serverDB,
               source: 'text',
               tenantId,
@@ -526,18 +529,7 @@ export class MessengerRouter {
         // In a channel, route the prompt ephemerally so the entire channel
         // doesn't see the system message.
         if (!link.activeAgentId) {
-          const noAgentText = 'No active agent selected. Send /agents to pick one.';
-          if (isChannelMention && binder.replyEphemeral) {
-            const threadTs = String(thread.id).split(':')[2];
-            await binder.replyEphemeral({
-              channelId: chatId,
-              text: noAgentText,
-              threadTs,
-              userId: senderId,
-            });
-          } else {
-            await binder.sendDmText(chatId, noAgentText);
-          }
+          await replyToSender(systemStrings.noActiveAgent);
           return;
         }
 
@@ -548,19 +540,20 @@ export class MessengerRouter {
           link.workspaceId &&
           !(await userIsWorkspaceMember(serverDB, link.userId, link.workspaceId))
         ) {
-          const staleScopeText =
-            'Your active workspace is no longer available. Send /switch to choose another scope.';
-          if (isChannelMention && binder.replyEphemeral) {
-            const threadTs = String(thread.id).split(':')[2];
-            await binder.replyEphemeral({
-              channelId: chatId,
-              text: staleScopeText,
-              threadTs,
-              userId: senderId,
-            });
-          } else {
-            await binder.sendDmText(chatId, staleScopeText);
-          }
+          await replyToSender(systemStrings.staleScope);
+          return;
+        }
+
+        const featureAccess = await getBotFeatureAccessState({
+          action: 'runtime',
+          platform,
+          userId: link.userId,
+        });
+        if (!featureAccess.allowed) {
+          await replyToSender(
+            featureAccess.blockedMessage ??
+              'This messenger connection requires a paid plan. Upgrade in LobeHub Settings to continue.',
+          );
           return;
         }
 
@@ -576,7 +569,9 @@ export class MessengerRouter {
       } catch (error) {
         log('handle: handler error: %O', error);
         try {
-          await thread.post(renderInlineError('Something went wrong'));
+          await thread.post(
+            renderInlineError(systemStrings.genericError, getBotReplyLocale(platform)),
+          );
         } catch {
           /* ignore */
         }
@@ -721,7 +716,7 @@ export class MessengerRouter {
     // names comes from the shared registry so every native-slash platform
     // surfaces the same menu.
     if (binder.replyPrivately) {
-      const slashPaths = this.commands.map((cmd) => `/${cmd.name}`);
+      const slashPaths = commands.map((cmd) => `/${cmd.name}`);
       bot.onSlashCommand(slashPaths, async (event) => {
         await this.handleSlashCommand({ binder, bot, client, creds, event, serverDB });
       });
@@ -776,6 +771,7 @@ export class MessengerRouter {
       {
         description: 'Bind your account to LobeHub',
         handler: async (ctx) => {
+          const strings = getMessengerSystemStrings(ctx.platform);
           // Already-linked short-circuit: re-running `/start` while bound
           // would issue a fresh verify-im token and, on completion,
           // overwrite the user's `messenger_account_links` row via
@@ -784,9 +780,7 @@ export class MessengerRouter {
           // active agent and the conversation hangs at "typing…" with no
           // reply. Treat `/start` as the unbound-only onboarding command.
           if (ctx.link) {
-            await ctx.reply(
-              'Your account is already linked to LobeHub. Send /agents to switch the active agent, or /new to start a fresh conversation.',
-            );
+            await ctx.reply(strings.accountAlreadyLinked);
             return;
           }
           // The verify-im URL is one-shot and account-binding; it must reach
@@ -818,7 +812,7 @@ export class MessengerRouter {
           // For the Slack ephemeral path the prompt is already inline, a
           // second "check your DM" would be misleading.
           if (!ctx.isDM && !canEphemeralInChannel) {
-            await ctx.reply('Check your DM with LobeHub for the link button.');
+            await ctx.reply(strings.checkDirectMessage);
           }
         },
         name: 'start',
@@ -849,15 +843,16 @@ export class MessengerRouter {
       {
         description: 'Start a new conversation',
         handler: async (ctx) => {
+          const strings = getMessengerSystemStrings(ctx.platform);
           if (!ctx.link) {
-            await ctx.reply('You need to /start to bind your account first.');
+            await ctx.reply(strings.needLink);
             return;
           }
           if (!ctx.thread) {
             // Slash dispatch has no chat-sdk Thread; setState lives on the
             // thread instance, so direct the user back to the DM where the
             // text path can pick the command up.
-            await ctx.reply('Open your direct message with the LobeHub bot and send `/new` there.');
+            await ctx.reply(strings.newDirectMessageOnly);
             return;
           }
           // Drop the cached topicId so the next message starts a fresh topic.
@@ -867,26 +862,25 @@ export class MessengerRouter {
           } catch (error) {
             log('command /new: setState failed: %O', error);
           }
-          await ctx.reply('Started a new conversation. Your next message begins a fresh topic.');
+          await ctx.reply(strings.newStarted);
         },
         name: 'new',
       },
       {
         description: 'Stop the current execution',
         handler: async (ctx) => {
+          const strings = getMessengerSystemStrings(ctx.platform);
           if (!ctx.link) {
-            await ctx.reply('You need to /start to bind your account first.');
+            await ctx.reply(strings.needLink);
             return;
           }
           if (!ctx.thread) {
-            await ctx.reply(
-              'Open your direct message with the LobeHub bot and send `/stop` there.',
-            );
+            await ctx.reply(strings.stopDirectMessageOnly);
             return;
           }
           const isActive = AgentBridgeService.isThreadActive(ctx.thread.id);
           if (!isActive) {
-            await ctx.reply('No active execution to stop.');
+            await ctx.reply(strings.stopNotActive);
             return;
           }
           const operationId = AgentBridgeService.getActiveOperationId(ctx.thread.id);
@@ -898,14 +892,14 @@ export class MessengerRouter {
               const result = await aiAgentService.interruptTask({ operationId });
               if (!result.success) {
                 log('command /stop: runtime interrupt rejected for op=%s', operationId);
-                await ctx.reply('Unable to stop the current execution.');
+                await ctx.reply(strings.stopUnable);
                 return;
               }
               AgentBridgeService.clearActiveThread(ctx.thread.id);
               log('command /stop: interrupted op=%s', operationId);
             } catch (error) {
               log('command /stop: interruptTask failed: %O', error);
-              await ctx.reply('Unable to stop the current execution.');
+              await ctx.reply(strings.stopUnable);
               return;
             }
           } else {
@@ -914,7 +908,7 @@ export class MessengerRouter {
             AgentBridgeService.requestStop(ctx.thread.id);
             log('command /stop: queued deferred stop for thread=%s', ctx.thread.id);
           }
-          await ctx.reply('Stop requested.');
+          await ctx.reply(strings.stopRequested);
         },
         name: 'stop',
       },
@@ -931,16 +925,18 @@ export class MessengerRouter {
           },
         ],
         handler: async (ctx) => {
+          const replyLocale = getBotReplyLocale(ctx.platform);
+          const strings = getMessengerSystemStrings(ctx.platform);
           // Feedback is tied to a LobeHub account so the team can follow up;
           // an unbound user has no email/identity to attach. Mirror the
           // `/new` / `/stop` "you need to /start" guard for consistency.
           if (!ctx.link) {
-            await ctx.reply('You need to /start to bind your account first.');
+            await ctx.reply(strings.needLink);
             return;
           }
           const body = ctx.args.trim();
           if (!body) {
-            await ctx.reply(renderCommandReply('cmdFeedbackUsage'));
+            await ctx.reply(renderCommandReply('cmdFeedbackUsage', replyLocale));
             return;
           }
           const result = await submitBotFeedback(ctx.serverDB, {
@@ -950,17 +946,17 @@ export class MessengerRouter {
             userId: ctx.link.userId,
           });
           if (!result.success) {
-            await ctx.reply(renderCommandReply('cmdFeedbackError'));
+            await ctx.reply(renderCommandReply('cmdFeedbackError', replyLocale));
             return;
           }
-          await ctx.reply(renderFeedbackSubmitted(result.issueUrl));
+          await ctx.reply(renderFeedbackSubmitted(result.issueUrl, replyLocale));
         },
         name: 'feedback',
       },
       {
         description: 'Show usage',
         handler: async (ctx) => {
-          await ctx.reply(HELP_TEXT);
+          await ctx.reply(getMessengerSystemStrings(ctx.platform).help);
         },
         name: 'help',
       },
@@ -1003,10 +999,11 @@ export class MessengerRouter {
     const args = event.text?.trim() ?? '';
 
     const reply = (text: string) => replyPrivately.call(binder, event.channel, event.user, text);
+    const systemStrings = getMessengerSystemStrings(creds.platform);
 
-    const command = this.commands.find((c) => c.name === cmdName);
+    const command = this.getCommandsForPlatform(creds.platform).find((c) => c.name === cmdName);
     if (!command) {
-      await reply(`Unknown command: /${cmdName}`);
+      await reply(systemStrings.unknownCommand(cmdName));
       return;
     }
 
@@ -1077,7 +1074,7 @@ export class MessengerRouter {
     } catch (error) {
       log('handleSlashCommand: handler error for /%s: %O', cmdName, error);
       try {
-        await reply('Something went wrong.');
+        await reply(systemStrings.genericError);
       } catch {
         /* ignore */
       }
@@ -1092,15 +1089,16 @@ export class MessengerRouter {
    */
   private async runAgentsCommand(ctx: MessengerCommandContext): Promise<void> {
     const { binder, chatId, link, serverDB } = ctx;
+    const strings = getMessengerSystemStrings(ctx.platform);
 
     if (!link) {
-      await ctx.reply('You need to /start to bind your account first.');
+      await ctx.reply(strings.needLink);
       return;
     }
 
     const userAgents = await this.fetchUserAgents(serverDB, link.userId, link.workspaceId);
     if (userAgents.length === 0) {
-      await ctx.reply('You have no agents yet. Create one in LobeHub, then come back to /agents.');
+      await ctx.reply(strings.agentsEmpty);
       return;
     }
 
@@ -1110,18 +1108,16 @@ export class MessengerRouter {
     if (args && !binder.sendAgentPicker) {
       const index = Number.parseInt(args, 10);
       if (!Number.isInteger(index) || index < 1 || index > userAgents.length) {
-        await ctx.reply(`Usage: /agents <n>, where n is between 1 and ${userAgents.length}.`);
+        await ctx.reply(strings.agentsUsage(userAgents.length));
         return;
       }
       const target = userAgents[index - 1];
       if (link.activeAgentId === target.id) {
-        await ctx.reply(`${target.title} is already the active agent.`);
+        await ctx.reply(strings.activeAgentAlready(target.title));
         return;
       }
       await MessengerAccountLinkModel.setActiveAgentById(serverDB, link.id, target.id);
-      await ctx.reply(
-        `Switched active agent to: ${target.title}. Your next message will go there.`,
-      );
+      await ctx.reply(strings.activeAgentChanged(target.title));
       return;
     }
 
@@ -1137,19 +1133,17 @@ export class MessengerRouter {
         // complete the deferred reply via the follow-up webhook. Without
         // this, Discord keeps "Thinking..." until it times out.
         interaction: ctx.interaction,
-        text: 'Tap an agent to make it the active one:',
+        text: strings.agentsPicker,
       });
       return;
     }
 
     // Final fallback: numbered list + usage hint for `/agents <n>`.
     const lines = userAgents.map((agent, i) => {
-      const marker = link.activeAgentId === agent.id ? ' (active)' : '';
+      const marker = link.activeAgentId === agent.id ? ` (${strings.activeMarker})` : '';
       return `${i + 1}. ${agent.title}${marker}`;
     });
-    await ctx.reply(
-      `Your agents:\n${lines.join('\n')}\n\nReply with /agents <n> to switch the active agent.`,
-    );
+    await ctx.reply(`${strings.agentsHeading}\n${lines.join('\n')}\n\n${strings.agentsHint}`);
   }
 
   /**
@@ -1165,12 +1159,13 @@ export class MessengerRouter {
    */
   private async runSwitchCommand(ctx: MessengerCommandContext): Promise<void> {
     const { binder, chatId, link, serverDB } = ctx;
+    const strings = getMessengerSystemStrings(ctx.platform);
     if (!link) {
-      await ctx.reply('You need to /start to bind your account first.');
+      await ctx.reply(strings.needLink);
       return;
     }
 
-    const scopes = await this.fetchUserScopes(serverDB, link.userId);
+    const scopes = await this.fetchUserScopes(serverDB, link.userId, ctx.platform);
 
     // Text-fallback path: `/switch 2` switches without needing the keyboard,
     // for platforms (or clients) where tap-buttons aren't available.
@@ -1178,16 +1173,16 @@ export class MessengerRouter {
     if (arg && !binder.sendAgentPicker) {
       const index = Number.parseInt(arg, 10);
       if (!Number.isInteger(index) || index < 1 || index > scopes.length) {
-        await ctx.reply(`Usage: /switch <n>, where n is between 1 and ${scopes.length}.`);
+        await ctx.reply(strings.scopesUsage(scopes.length));
         return;
       }
       const target = scopes[index - 1];
       if ((link.workspaceId ?? null) === target.id) {
-        await ctx.reply(`You're already in ${target.name}.`);
+        await ctx.reply(strings.scopeAlready(target.name));
         return;
       }
       const defaultAgent = await this.applyScopeSwitch(serverDB, link.id, link.userId, target);
-      await ctx.reply(this.scopeSwitchedText(target.name, defaultAgent?.title));
+      await ctx.reply(strings.scopeSwitched(target.name, defaultAgent?.title));
       return;
     }
 
@@ -1201,17 +1196,17 @@ export class MessengerRouter {
         // Discord-only: forward the slash interaction so the binder can
         // complete the deferred reply via the follow-up webhook.
         interaction: ctx.interaction,
-        text: 'Tap a scope to switch:',
+        text: strings.scopePicker,
       });
       return;
     }
 
     // Final fallback: numbered list + usage hint for `/switch <n>`.
     const lines = scopes.map((scope, i) => {
-      const marker = (link.workspaceId ?? null) === scope.id ? ' (current)' : '';
+      const marker = (link.workspaceId ?? null) === scope.id ? ` (${strings.currentMarker})` : '';
       return `${i + 1}. ${scope.name}${marker}`;
     });
-    await ctx.reply(`Scopes:\n${lines.join('\n')}\n\nReply with /switch <n> to switch scope.`);
+    await ctx.reply(`${strings.scopesHeading}\n${lines.join('\n')}\n\n${strings.scopesHint}`);
   }
 
   /**
@@ -1221,11 +1216,13 @@ export class MessengerRouter {
   private async fetchUserScopes(
     serverDB: LobeChatDatabase,
     userId: string,
+    platform: MessengerPlatform,
   ): Promise<{ id: string | null; name: string }[]> {
-    if (!(await isWorkspaceFeatureEnabledForUser(userId))) return [{ id: null, name: 'Personal' }];
+    const personalScope = { id: null, name: getMessengerSystemStrings(platform).personalScope };
+    if (!(await isWorkspaceFeatureEnabledForUser(userId))) return [personalScope];
 
     const workspaces = await new WorkspaceModel(serverDB, userId).listUserWorkspaces();
-    return [{ id: null, name: 'Personal' }, ...workspaces.map((w) => ({ id: w.id, name: w.name }))];
+    return [personalScope, ...workspaces.map((w) => ({ id: w.id, name: w.name }))];
   }
 
   /**
@@ -1249,12 +1246,6 @@ export class MessengerRouter {
       defaultAgent?.id ?? null,
     );
     return defaultAgent;
-  }
-
-  private scopeSwitchedText(scopeName: string, defaultAgentTitle?: string): string {
-    return defaultAgentTitle
-      ? `Switched to ${scopeName}. Now chatting with ${defaultAgentTitle}. Send /agents to change.`
-      : `Switched to ${scopeName}. No agents here yet — create one in LobeHub, then /agents.`;
   }
 
   private toScopeEntries(
@@ -1398,6 +1389,7 @@ export class MessengerRouter {
     if (!binder.acknowledgeCallback) return;
 
     const ack = binder.acknowledgeCallback.bind(binder, action);
+    const strings = getMessengerSystemStrings(creds.platform);
 
     const scopeMatch = action.data.match(/^messenger:scope:(.+)$/);
     if (scopeMatch) {
@@ -1407,7 +1399,7 @@ export class MessengerRouter {
 
     const switchMatch = action.data.match(/^messenger:switch:(.+)$/);
     if (!switchMatch) {
-      await ack({ toast: 'Unknown action.' });
+      await ack({ toast: strings.unknownAction });
       return;
     }
 
@@ -1420,28 +1412,28 @@ export class MessengerRouter {
       creds.tenantId,
     );
     if (!link) {
-      await ack({ toast: 'Not linked. Send /start first.' });
+      await ack({ toast: strings.notLinked });
       return;
     }
 
     const userAgents = await this.fetchUserAgents(serverDB, link.userId, link.workspaceId);
     const target = userAgents.find((agent) => agent.id === targetAgentId);
     if (!target) {
-      await ack({ toast: 'Agent not found.' });
+      await ack({ toast: strings.agentNotFound });
       return;
     }
 
     if (link.activeAgentId === targetAgentId) {
-      await ack({ toast: `${target.title} is already active.` });
+      await ack({ toast: strings.activeAgentAlreadyToast(target.title) });
       return;
     }
 
     await MessengerAccountLinkModel.setActiveAgentById(serverDB, link.id, targetAgentId);
     await ack({
-      toast: `Switched to ${target.title}.`,
+      toast: strings.activeAgentChangedToast(target.title),
       updatedPicker: {
         entries: this.toPickerEntries(userAgents, targetAgentId),
-        text: 'Pick an agent to receive your messages:',
+        text: strings.receiveMessagesPicker,
       },
     });
   }
@@ -1458,6 +1450,7 @@ export class MessengerRouter {
     scopeToken: string,
     ack: (ack: CallbackAcknowledgement) => Promise<void>,
   ): Promise<void> {
+    const strings = getMessengerSystemStrings(creds.platform);
     const serverDB = await getServerDB();
     const link = await MessengerAccountLinkModel.findByPlatformUser(
       serverDB,
@@ -1466,30 +1459,30 @@ export class MessengerRouter {
       creds.tenantId,
     );
     if (!link) {
-      await ack({ toast: 'Not linked. Send /start first.' });
+      await ack({ toast: strings.notLinked });
       return;
     }
 
     const targetScopeId = scopeToken === PERSONAL_SCOPE_ID ? null : scopeToken;
-    const scopes = await this.fetchUserScopes(serverDB, link.userId);
+    const scopes = await this.fetchUserScopes(serverDB, link.userId, creds.platform);
     const target = scopes.find((scope) => scope.id === targetScopeId);
     if (!target) {
-      await ack({ toast: 'Scope not found.' });
+      await ack({ toast: strings.scopeNotFound });
       return;
     }
 
     if ((link.workspaceId ?? null) === target.id) {
-      await ack({ toast: `You're already in ${target.name}.` });
+      await ack({ toast: strings.scopeAlready(target.name) });
       return;
     }
 
     const defaultAgent = await this.applyScopeSwitch(serverDB, link.id, link.userId, target);
     await ack({
-      toast: this.scopeSwitchedText(target.name, defaultAgent?.title),
+      toast: strings.scopeSwitched(target.name, defaultAgent?.title),
       updatedPicker: {
         action: 'scope',
         entries: this.toScopeEntries(scopes, target.id),
-        text: 'Tap a scope to switch:',
+        text: strings.scopePicker,
       },
     });
   }

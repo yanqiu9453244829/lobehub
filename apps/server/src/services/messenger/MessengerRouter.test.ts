@@ -3,12 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessengerRouter } from './MessengerRouter';
 
+const mockGetBotFeatureAccessState = vi.hoisted(() => vi.fn());
+
 vi.mock('@/database/core/db-adaptor', () => ({
   getServerDB: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('@/server/modules/AgentRuntime/redis', () => ({
   getAgentRuntimeRedisClient: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('@/business/server/bot/featureAccess', () => ({
+  getBotFeatureAccessState: mockGetBotFeatureAccessState,
+}));
+
+vi.mock('@/envs/gateway', () => ({
+  gatewayEnv: { MESSAGE_GATEWAY_SERVICE_TOKEN: 'gateway-service-token' },
 }));
 
 const mockResolveByPayload = vi.fn();
@@ -75,6 +85,7 @@ const mockChatBot = {
   webhooks: {
     slack: mockWebhookHandler,
     telegram: mockWebhookHandler,
+    wechat: mockWebhookHandler,
   },
 };
 vi.mock('chat', () => ({
@@ -177,6 +188,19 @@ vi.mock('./platforms/telegram/binder', () => ({
   })),
 }));
 
+const mockWechatBinder = {
+  createClient: () => ({
+    createAdapter: () => ({}),
+    extractChatId: (id: string) => id.split(':').at(-1) ?? id,
+  }),
+  handleUnlinkedMessage: vi.fn(),
+  notifyLinkSuccess: vi.fn(),
+  sendDmText: vi.fn(),
+};
+vi.mock('./platforms/wechat/binder', () => ({
+  MessengerWechatBinder: vi.fn().mockImplementation(() => mockWechatBinder),
+}));
+
 const buildSlackRequest = (body: string, headers: Record<string, string> = {}): Request =>
   new Request('https://app.example.com/api/agent/messenger/webhooks/slack', {
     body,
@@ -199,11 +223,23 @@ const slackCreds = (tenantId: string) => ({
   tenantId,
 });
 
+const wechatCreds = {
+  applicationId: 'wechat-bot',
+  baseUrl: 'https://ilink.example.com',
+  botId: 'wechat-bot',
+  botToken: 'wechat-token',
+  installationKey: 'wechat:wechat-user',
+  metadata: {},
+  platform: 'wechat' as const,
+  tenantId: 'wechat-user',
+};
+
 beforeEach(() => {
   mockVerifySignature.mockReturnValue(true);
   mockChatBot.webhooks = {
     slack: mockWebhookHandler,
     telegram: mockWebhookHandler,
+    wechat: mockWebhookHandler,
   };
   mockFindLink.mockReset();
   mockSetActiveScope.mockReset();
@@ -213,6 +249,8 @@ beforeEach(() => {
   ]);
   mockGetServerFeatureFlagsStateFromRuntimeConfig.mockReset();
   mockGetServerFeatureFlagsStateFromRuntimeConfig.mockResolvedValue({ enableWorkspace: true });
+  mockGetBotFeatureAccessState.mockReset();
+  mockGetBotFeatureAccessState.mockResolvedValue({ allowed: true });
   mockAgentBridgeConstructor.mockReset();
   mockHandleMention.mockReset();
   mockHandleSubscribed.mockReset();
@@ -228,6 +266,8 @@ beforeEach(() => {
   mockSlackBinder.replyPrivately.mockReset();
   mockSlackBinder.sendAgentPicker.mockReset();
   mockSlackBinder.sendDmText.mockReset();
+  mockWechatBinder.handleUnlinkedMessage.mockReset();
+  mockWechatBinder.sendDmText.mockReset();
 });
 
 afterEach(() => {
@@ -411,6 +451,18 @@ const loadSlackBot = async (): Promise<void> => {
   );
 };
 
+const loadWechatBot = async (): Promise<void> => {
+  mockResolveByPayload.mockResolvedValue(wechatCreds);
+  const router = new MessengerRouter();
+  await router.getWebhookHandler('wechat')(
+    new Request('https://app.example.com/api/agent/messenger/webhooks/wechat', {
+      body: '{}',
+      headers: { authorization: 'Bearer gateway-service-token' },
+      method: 'POST',
+    }),
+  );
+};
+
 const fakeMessage = (overrides: Partial<any> = {}): any => ({
   author: { isBot: false, userId: 'U_ALICE', userName: 'alice' },
   id: 'm1',
@@ -428,6 +480,13 @@ const fakeChannelThread = (): any => ({
 
 const fakeDmThread = (): any => ({
   id: 'slack:D_DM',
+  isDM: true,
+  post: vi.fn(),
+  subscribe: vi.fn(),
+});
+
+const fakeWechatDmThread = (): any => ({
+  id: 'wechat:dm:wechat-user',
   isDM: true,
   post: vi.fn(),
   subscribe: vi.fn(),
@@ -469,6 +528,68 @@ describe('MessengerRouter channel @mention', () => {
     // `onNewMention`.
     expect(thread.subscribe).not.toHaveBeenCalled();
     expect(mockSlackBinder.handleUnlinkedMessage).not.toHaveBeenCalled();
+    expect(mockSlackBinder.replyEphemeral).not.toHaveBeenCalled();
+  });
+
+  it('sends the feature-gate denial ephemerally for a public channel mention', async () => {
+    await loadSlackBot();
+    mockFindLink.mockResolvedValue({
+      activeAgentId: 'agt_main',
+      id: 'link_1',
+      platformUserId: 'U_ALICE',
+      tenantId: 'T_ACME',
+      userId: 'user_alice',
+      workspaceId: null,
+    });
+    mockGetBotFeatureAccessState.mockResolvedValueOnce({
+      allowed: false,
+      blockedMessage: 'Upgrade to continue.',
+    });
+
+    const handler = mockChatBot.onNewMention.mock.calls[0][0] as (
+      thread: any,
+      msg: any,
+    ) => Promise<void>;
+    await handler(fakeChannelThread(), fakeMessage({ isMention: true }));
+
+    expect(mockGetBotFeatureAccessState).toHaveBeenCalledWith({
+      action: 'runtime',
+      platform: 'slack',
+      userId: 'user_alice',
+    });
+    expect(mockHandleMention).not.toHaveBeenCalled();
+    expect(mockSlackBinder.replyEphemeral).toHaveBeenCalledWith({
+      channelId: 'C_GENERAL',
+      text: 'Upgrade to continue.',
+      threadTs: '1715000000.000100',
+      userId: 'U_ALICE',
+    });
+    expect(mockSlackBinder.sendDmText).not.toHaveBeenCalled();
+  });
+
+  it('sends the feature-gate denial normally in a private conversation', async () => {
+    await loadSlackBot();
+    mockFindLink.mockResolvedValue({
+      activeAgentId: 'agt_main',
+      id: 'link_1',
+      platformUserId: 'U_ALICE',
+      tenantId: 'T_ACME',
+      userId: 'user_alice',
+      workspaceId: null,
+    });
+    mockGetBotFeatureAccessState.mockResolvedValueOnce({
+      allowed: false,
+      blockedMessage: 'Upgrade to continue.',
+    });
+
+    const handler = mockChatBot.onNewMention.mock.calls[0][0] as (
+      thread: any,
+      msg: any,
+    ) => Promise<void>;
+    await handler(fakeDmThread(), fakeMessage({ isMention: true }));
+
+    expect(mockHandleMention).not.toHaveBeenCalled();
+    expect(mockSlackBinder.sendDmText).toHaveBeenCalledWith('D_DM', 'Upgrade to continue.');
     expect(mockSlackBinder.replyEphemeral).not.toHaveBeenCalled();
   });
 
@@ -1023,6 +1144,62 @@ describe('MessengerRouter onSubscribedMessage gating', () => {
     );
 
     expect(mockHandleSubscribed).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MessengerRouter WeChat system commands', () => {
+  const personalLink = {
+    activeAgentId: 'agt_main',
+    id: 'link_wechat',
+    platformUserId: 'wechat-user',
+    tenantId: 'wechat-user',
+    userId: 'user_alice',
+    workspaceId: null,
+  };
+
+  it('always renders /switch instructions in Chinese', async () => {
+    await loadWechatBot();
+    mockFindLink.mockResolvedValue(personalLink);
+
+    const handler = mockChatBot.onNewMention.mock.calls[0][0] as (
+      thread: any,
+      msg: any,
+    ) => Promise<void>;
+    await handler(fakeWechatDmThread(), fakeMessage({ isMention: true, text: '/switch' }));
+
+    expect(mockWechatBinder.sendDmText).toHaveBeenCalledWith(
+      'wechat-user',
+      expect.stringMatching(/可切换空间：[\s\S]*个人账号 \(当前\)[\s\S]*\/switch <序号>/),
+    );
+  });
+
+  it('omits /start from WeChat help', async () => {
+    await loadWechatBot();
+    mockFindLink.mockResolvedValue(personalLink);
+
+    const handler = mockChatBot.onNewMention.mock.calls[0][0] as (
+      thread: any,
+      msg: any,
+    ) => Promise<void>;
+    await handler(fakeWechatDmThread(), fakeMessage({ isMention: true, text: '/help' }));
+
+    const helpText = mockWechatBinder.sendDmText.mock.calls[0][1];
+    expect(helpText).toContain('可用命令：');
+    expect(helpText).not.toContain('/start');
+  });
+
+  it('does not intercept /start as a WeChat system command', async () => {
+    await loadWechatBot();
+    mockFindLink.mockResolvedValue(personalLink);
+
+    const handler = mockChatBot.onNewMention.mock.calls[0][0] as (
+      thread: any,
+      msg: any,
+    ) => Promise<void>;
+    await handler(fakeWechatDmThread(), fakeMessage({ isMention: true, text: '/start' }));
+
+    expect(mockWechatBinder.sendDmText).not.toHaveBeenCalled();
+    expect(mockHandleMention).toHaveBeenCalledTimes(1);
   });
 });
 

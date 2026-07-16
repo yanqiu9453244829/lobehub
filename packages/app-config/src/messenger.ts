@@ -43,7 +43,7 @@ export const getMessengerConfig = () => {
 
 export const messengerEnv = getMessengerConfig();
 
-export type MessengerPlatform = 'telegram' | 'slack' | 'discord';
+export type MessengerPlatform = 'telegram' | 'slack' | 'discord' | 'wechat';
 
 export interface MessengerTelegramConfig {
   botToken: string;
@@ -69,6 +69,14 @@ export interface MessengerDiscordConfig {
    */
   clientSecret?: string;
   publicKey: string;
+}
+
+/**
+ * WeChat System Bot credentials are user-owned and acquired by QR scan, so
+ * the deployment-level provider only acts as an availability switch.
+ */
+export interface MessengerWechatConfig {
+  enabled: true;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +168,10 @@ export const getMessengerDiscordConfig = async (): Promise<MessengerDiscordConfi
   });
 };
 
+export const getMessengerWechatConfig = async (): Promise<MessengerWechatConfig | null> => {
+  return fetchAndCache<MessengerWechatConfig>('wechat', () => ({ enabled: true }));
+};
+
 export const isMessengerPlatformEnabled = async (platform: MessengerPlatform): Promise<boolean> => {
   switch (platform) {
     case 'telegram': {
@@ -171,6 +183,9 @@ export const isMessengerPlatformEnabled = async (platform: MessengerPlatform): P
     case 'discord': {
       return !!(await getMessengerDiscordConfig());
     }
+    case 'wechat': {
+      return !!(await getMessengerWechatConfig());
+    }
     default: {
       return false;
     }
@@ -178,7 +193,7 @@ export const isMessengerPlatformEnabled = async (platform: MessengerPlatform): P
 };
 
 export const getEnabledMessengerPlatforms = async (): Promise<MessengerPlatform[]> => {
-  const platforms = ['telegram', 'slack', 'discord'] as const;
+  const platforms = ['telegram', 'slack', 'discord', 'wechat'] as const;
   const checks = await Promise.all(
     platforms.map(async (p) => ((await isMessengerPlatformEnabled(p)) ? p : null)),
   );
