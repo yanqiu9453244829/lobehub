@@ -9,7 +9,7 @@ import Page from '@/routes/(main)/settings/apikey';
 // this page is intentionally NOT gated behind WorkspaceAdminOnly.
 const WorkspaceApiKeySetting = () => (
   <WorkspaceApiKeyGuard>
-    <Page />
+    <Page showSettingHeader={false} />
   </WorkspaceApiKeyGuard>
 );
 
