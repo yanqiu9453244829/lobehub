@@ -1,0 +1,3 @@
+{
+    "buildCommand": "vite build && rm -rf public/_spa public/_spa-auth && cross-env NODE_OPTIONS=--max-old-space-size=8192 AUTH=true vite build && tsx scripts/copySpaBuild.mts && tsx scripts/generateSpaTemplates.mts && cross-env NODE_OPTIONS=--max-old-space-size=7168 npx next build"
+}
