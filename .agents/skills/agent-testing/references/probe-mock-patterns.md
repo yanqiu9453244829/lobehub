@@ -1396,3 +1396,29 @@ nodeintegration, plugins, disablewebsecurity, allowpopups, preload, …`). The h
 - **Works**: use client observables (`messages.model`, thread ids, and chat-store operations) for web;
   use CLI/server execution and `agent_operations` for the server runtime. A change affecting both paths
   needs evidence from both paths.
+
+### E32. A listening port is NOT the product under test — another project's dev server can own it
+
+- **Situation**: `.env` says `PORT=<n>`, something answers on `<n>`, and a prior session recorded
+  "dev server running on `<n>`" — so the run plans a mere restart.
+- **Doesn't work**: trusting liveness (an HTTP response, an open socket) as identity. A sibling
+  project's dev server started on the same port responds happily; every request then exercises the
+  wrong codebase, and hook/DB assertions fail in ways that read as product bugs.
+- **Works**: fingerprint the app before using it: `ps -o command= -p <pid>` of the listener shows the
+  repo path in the `next dev`/`node` command line, and an unauthenticated `GET /` redirect is a
+  cheap signature (this repo's better-auth redirects to `/signin`; a Clerk app redirects to
+  `/login` with `x-clerk-*` headers). If it is the wrong app, free the port and start the right
+  server — and re-verify with the same fingerprint after boot.
+
+### C12. better-auth email-verification cannot be completed from the outside — treat real-mail paths as blocked
+
+- **Situation**: an assertion requires a REAL email-verification event (e.g. a hook that only fires
+  on better-auth verification routes), and the test inbox does not exist.
+- **Doesn't work**: recovering the token from the database. The `/verify-email` link token is a
+  signed JWT that is never stored; the email-otp OTP did not appear in the `verifications` table
+  either (only unrelated OIDC rows), and the send endpoint returns `{"success":true}` regardless.
+  Flipping `email_verified` in the DB is a fixture, not a verification — route-gated hooks
+  correctly ignore it (which is itself a useful negative check).
+- **Works**: mark the case `blocked` and cover the path with unit tests, or run the flow with a
+  real receivable mailbox (staging/prod smoke). Use the DB flip only to unblock downstream
+  fixtures, and assert it does NOT produce the event as a bonus authenticity check.
